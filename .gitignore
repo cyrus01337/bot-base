@@ -138,6 +138,6 @@ dmypy.json
 cython_debug/
 
 # Custom
-./base/resources/TOKEN
-./base/downloads/
+base/downloads/
+base/resources/TOKEN
 .flake8
