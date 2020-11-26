@@ -140,3 +140,4 @@ cython_debug/
 # Custom
 resources/TOKEN
 downloads/
+.flake8
