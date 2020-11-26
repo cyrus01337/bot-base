@@ -2,7 +2,6 @@ import re
 from collections.abc import Iterable
 from typing import Union
 
-import discord
 from discord.ext import commands
 
 import custom
