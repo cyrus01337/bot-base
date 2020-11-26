@@ -1,0 +1,3 @@
+class Empty:
+    LIST = []
+    STR = ""
