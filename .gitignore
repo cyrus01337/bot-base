@@ -139,5 +139,5 @@ cython_debug/
 
 # Custom
 */TOKEN
-downloads/
+base/downloads/
 .flake8
