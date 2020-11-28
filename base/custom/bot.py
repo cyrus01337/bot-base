@@ -49,7 +49,6 @@ class Bot(commands.Bot):
                     error = error.original
                 self.dispatch("startup_error", error)
             finally:
-                cog = cog.replace("cogs.", "")
                 print(f"{method} cog: {cog}")
         self._wrap_coroutines(self.__ainit__, self.display)
 
@@ -161,19 +160,14 @@ class Bot(commands.Bot):
             await self.process_commands(message)
 
     def run(self, token=None, **kwargs):
-        path = ".base/resources/TOKEN"
+        path = "./TOKEN"
 
         if token is None:
-            if not os.path.exists(path) and os.path.exists("./TOKEN"):
-                path = "./TOKEN"
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    token = str.strip(f.read())
             else:
-                path = None
-
-        if token is not None or path is not None:
-            with open(path, "r") as f:
-                token = str.strip(f.read())
-        # if token remains None:
-        # AttributeError: 'NoneType' object has no attribute 'strip'
+                raise error
         super().run(token, **kwargs)
 
     async def close(self):
