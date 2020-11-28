@@ -9,6 +9,7 @@ import discord
 from discord.ext import commands
 
 from base import utils
+from base import errors
 from base.resources import PREFIXES
 
 
@@ -118,6 +119,7 @@ class Bot(commands.Bot):
                                 or command_name.startswith(name)
 
                             if autocompleted:
+                                # rework - message editing is bad
                                 message.content = message.content.replace(
                                     name,
                                     command_name
@@ -167,7 +169,8 @@ class Bot(commands.Bot):
                 with open(path, "r") as f:
                     token = str.strip(f.read())
             else:
-                raise error
+                full = os.path.abspath(path)
+                raise errors.TokenFileNotFound(f'{full}" not found')
         super().run(token, **kwargs)
 
     async def close(self):
