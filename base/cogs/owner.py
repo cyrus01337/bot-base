@@ -4,7 +4,7 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-import custom
+from base import custom
 
 
 class Owner(custom.Cog, hidden=True):
@@ -17,10 +17,9 @@ class Owner(custom.Cog, hidden=True):
             False: "\U0001f44d"
         }
         self.permissions = discord.Permissions(administrator=True)
-        self.session = aiohttp.ClientSession()
 
     async def _download(self, url: str):
-        async with self.session.get(url) as response:
+        async with self.bot.session.get(url) as response:
             if not (os.path.exists("downloads") and os.path.isdir("downloads")):
                 os.mkdir("downloads")
             path = os.path.join("downloads", os.path.basename(url))
@@ -66,7 +65,6 @@ class Owner(custom.Cog, hidden=True):
 
     @commands.command()
     async def close(self, ctx):
-        await self.session.close()
         await self.bot.close()
 
 

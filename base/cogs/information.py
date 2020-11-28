@@ -4,9 +4,9 @@ from typing import Union
 
 from discord.ext import commands
 
-import custom
-from custom import Field
-from resources import PREFIXES
+from base import custom
+from base.custom import Field
+from base.resources import PREFIXES
 
 
 class HelpCommand(commands.HelpCommand):

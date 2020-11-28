@@ -4,7 +4,7 @@ import traceback
 import discord
 from discord.ext import commands
 
-import custom
+from base import custom
 
 
 class ErrorHandler(custom.Cog):
@@ -36,7 +36,7 @@ class ErrorHandler(custom.Cog):
         if isinstance(initial, discord.Message):
             ctx = await self.bot.get_context(initial)
         else:
-            message_found = getattr(initial, "message")
+            message_found = getattr(initial, "message", None)
 
             if message_found and isinstance(message_found, discord.Message):
                 ctx = await self.bot.get_context(message_found)
@@ -51,7 +51,10 @@ class ErrorHandler(custom.Cog):
                               f"```")
 
         traceback.print_exception(etype, error, tb)
-        await ctx.send(embed=embed)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            return
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):

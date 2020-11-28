@@ -1,6 +1,6 @@
 from discord.ext import commands
 
-import custom
+from base import custom
 
 
 class Testing(custom.Cog):
