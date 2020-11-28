@@ -1,12 +1,15 @@
+import os
 from asyncio import Event
 from collections.abc import Iterable
 from json import dumps
+from typing import Union
 
+import aiohttp
 import discord
 from discord.ext import commands
 
-import utils
-from resources import PREFIXES
+from base import utils
+from base.resources import PREFIXES
 
 
 class Bot(commands.Bot):
@@ -30,14 +33,14 @@ class Bot(commands.Bot):
 
         super().__init__(*args, **kwargs)
         self._display = Event()
-        # self.owner_id = 668906205799907348
+        self.session = aiohttp.ClientSession()
 
         for cog in utils.get_cogs():
             method = "[ ] Loaded"
 
             try:
                 if cog != "jishaku":
-                    cog = f"cogs.{cog}"
+                    cog = f"base.cogs.{cog}"
                 self.load_extension(cog)
             except commands.ExtensionError as error:
                 method = "[x] Failed"
@@ -85,6 +88,14 @@ class Bot(commands.Bot):
                 return content[len(prefix):]
         raise ValueError(f'prefix cannot be stripped from "{content}"')
 
+    async def _run_autocompleted_command(self, message: discord.Message):
+        ctx = await self.get_context(message)
+
+        if ctx.valid:
+            print(f'Autocompleted to "{ctx.command.name}"')
+            await self.invoke(ctx)
+        return ctx.valid
+
     async def _autocomplete_command(self, message):
         prefixes = tuple(self.command_prefix(self, message))
 
@@ -95,9 +106,7 @@ class Bot(commands.Bot):
                 command_found = self.get_command(name)
 
                 if command_found:
-                    ctx = await self.get_context(message)
-                    await self.invoke(ctx)
-                    return True
+                    return self._run_autocompleted_command(message)
                 else:
                     for command in self.commands:
                         command_names = (
@@ -106,8 +115,8 @@ class Bot(commands.Bot):
                         )
 
                         for command_name in command_names:
-                            autocompleted = (command_name == name
-                                             or command_name.startswith(name))
+                            autocompleted = command_name == name \
+                                or command_name.startswith(name)
 
                             if autocompleted:
                                 message.content = message.content.replace(
@@ -116,10 +125,18 @@ class Bot(commands.Bot):
                                 )
                                 ctx = await self.get_context(message)
 
-                                print(f'Autocompleted to "{command.name}"')
                                 await self.invoke(ctx)
                                 return True
         return False
+
+    async def wait_for_display(self):
+        if not self._display.is_set():
+            await self._display.wait()
+
+    @commands.Cog.listener()
+    async def on_startup_error(self, error):
+        await self.wait_for_display()
+        raise error
 
     # overwritable
     async def __ainit__(self):
@@ -129,21 +146,12 @@ class Bot(commands.Bot):
         if not self._display.is_set():
             self._display.set()
 
-    async def wait_for_display(self):
-        if not self._display.is_set():
-            await self._display.wait()
-
     @utils.when_ready
     async def display(self):
         utils.clear_screen()
         print(self.user.name, end="\n\n")
 
         self.handle_display()
-
-    @commands.Cog.listener()
-    async def on_startup_error(self, error):
-        await self.wait_for_display()
-        raise error
 
     # overwritten methods
     async def on_message(self, message):
@@ -152,7 +160,22 @@ class Bot(commands.Bot):
         if not autocompleted:
             await self.process_commands(message)
 
-    def run(self, *args, **kwargs):
-        with open("./resources/TOKEN", "r") as f:
-            token = str.strip(f.read())
-        super().run(token, *args, **kwargs)
+    def run(self, token=None, **kwargs):
+        path = ".base/resources/TOKEN"
+
+        if token is None:
+            if not os.path.exists(path) and os.path.exists("./TOKEN"):
+                path = "./TOKEN"
+            else:
+                path = None
+
+        if token is not None or path is not None:
+            with open(path, "r") as f:
+                token = str.strip(f.read())
+        # if token remains None:
+        # AttributeError: 'NoneType' object has no attribute 'strip'
+        super().run(token, **kwargs)
+
+    async def close(self):
+        await self.session.close()
+        await super().close()
