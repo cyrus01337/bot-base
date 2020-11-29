@@ -1,3 +1,4 @@
+import copy
 import os
 from asyncio import Event
 from collections.abc import Iterable
@@ -43,6 +44,8 @@ class Bot(commands.Bot):
                 if cog != "jishaku":
                     cog = f"base.cogs.{cog}"
                 self.load_extension(cog)
+            except commands.ExtensionNotFound:
+                method = "[-] Skipped"
             except commands.ExtensionError as error:
                 method = "[x] Failed"
 
@@ -88,14 +91,6 @@ class Bot(commands.Bot):
                 return content[len(prefix):]
         raise ValueError(f'prefix cannot be stripped from "{content}"')
 
-    async def _run_autocompleted_command(self, message: discord.Message):
-        ctx = await self.get_context(message)
-
-        if ctx.valid:
-            print(f'Autocompleted to "{ctx.command.name}"')
-            await self.invoke(ctx)
-        return ctx.valid
-
     async def _autocomplete_command(self, message):
         prefixes = tuple(self.command_prefix(self, message))
 
@@ -106,7 +101,11 @@ class Bot(commands.Bot):
                 command_found = self.get_command(name)
 
                 if command_found:
-                    return self._run_autocompleted_command(message)
+                    ctx = await self.get_context(message)
+
+                    print(f'Autocompleted to "{ctx.command.name}"')
+                    await self.invoke(ctx)
+                    return command_found
                 else:
                     for command in self.commands:
                         command_names = (
@@ -119,16 +118,17 @@ class Bot(commands.Bot):
                                 or command_name.startswith(name)
 
                             if autocompleted:
-                                # rework - message editing is bad
-                                message.content = message.content.replace(
+                                alt_message = copy.copy(message)
+                                alt_content = alt_message.content.replace(
                                     name,
                                     command_name
                                 )
-                                ctx = await self.get_context(message)
+                                alt_message.content = alt_content
+                                ctx = await self.get_context(alt_message)
 
                                 await self.invoke(ctx)
-                                return True
-        return False
+                                return command
+        return None
 
     async def wait_for_display(self):
         if not self._display.is_set():
