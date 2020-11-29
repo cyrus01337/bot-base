@@ -140,5 +140,5 @@ cython_debug/
 # Custom
 .flake8
 TOKEN
-bot.py
 base/downloads/
+./bot.py
