@@ -14,16 +14,6 @@ def resolve_path(path: str):
     return path
 
 
-def get_cogs(path: str = "bot/cogs"):
-    cogs = ["jishaku"]
-
-    for file in os.listdir(path):
-        if file.startswith("__") is False and file.endswith(".py"):
-            path = resolve_path(file)
-            cogs.append(path)
-    return cogs
-
-
 def clear_screen():
     return os.system("cls" if os.name == "nt" else "clear")
 

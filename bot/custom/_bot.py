@@ -9,9 +9,9 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-from base import utils
-from base import errors
-from base.resources import PREFIXES
+from bot import utils
+from bot import errors
+from bot.resources import PREFIXES
 
 
 class Bot(commands.Bot):
@@ -37,23 +37,7 @@ class Bot(commands.Bot):
         self._display = Event()
         self.session = aiohttp.ClientSession()
 
-        for cog in utils.get_cogs():
-            method = "[ ] Loaded"
-
-            try:
-                if cog != "jishaku":
-                    cog = f"base.cogs.{cog}"
-                self.load_extension(cog)
-            except commands.ExtensionNotFound:
-                method = "[-] Skipped"
-            except commands.ExtensionError as error:
-                method = "[x] Failed"
-
-                if isinstance(error, commands.ExtensionFailed):
-                    error = error.original
-                self.dispatch("startup_error", error)
-            finally:
-                print(f"{method} cog: {cog}")
+        self.load_extensions()
         self._wrap_coroutines(self.__ainit__, self.display)
 
     @property
@@ -139,6 +123,38 @@ class Bot(commands.Bot):
                                 await self.invoke(ctx)
                                 return command
         return None
+
+    def get_cogs(self, path: str):
+        cogs = ["jishaku", "jishaku"]
+
+        for file in os.listdir(path):
+            if file.startswith("__") is False and file.endswith(".py"):
+                path = utils.resolve_path(file)
+                cogs.append(path)
+        return cogs
+
+    def load_extensions(self, path: str = "bot/cogs"):
+        dotted = utils.resolve_path(path)
+
+        for cog in self.get_cogs(path):
+            method = "[ ] Loaded"
+
+            try:
+                if cog != "jishaku":
+                    cog = f"{dotted}.{cog}"
+                self.load_extension(cog)
+            except commands.ExtensionNotFound:
+                method = "[-] Skipped"
+            except commands.ExtensionAlreadyLoaded:
+                method = "[o] Loaded (Prior)"
+            except commands.ExtensionError as error:
+                method = "[x] Failed"
+
+                if isinstance(error, commands.ExtensionFailed):
+                    error = error.original
+                self.dispatch("startup_error", error)
+            finally:
+                print(f"{method} cog: {cog}")
 
     async def wait_for_display(self):
         if not self._display.is_set():
