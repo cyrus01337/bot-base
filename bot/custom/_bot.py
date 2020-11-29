@@ -125,7 +125,7 @@ class Bot(commands.Bot):
         return None
 
     def get_cogs(self, path: str):
-        cogs = ["jishaku", "jishaku"]
+        cogs = ["jishaku"]
 
         for file in os.listdir(path):
             if file.startswith("__") is False and file.endswith(".py"):
