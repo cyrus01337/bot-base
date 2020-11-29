@@ -4,7 +4,7 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-from base import custom
+from bot import custom
 
 
 class Owner(custom.Cog, hidden=True):

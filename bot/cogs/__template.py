@@ -1,6 +1,6 @@
 from discord.ext import commands
 
-import custom
+from bot import custom
 
 
 class Cog(custom.Cog):
