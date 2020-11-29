@@ -141,3 +141,4 @@ cython_debug/
 .flake8
 TOKEN
 base/downloads/
+bot.py
