@@ -6,7 +6,6 @@ from discord.ext import commands
 
 from bot import custom
 from bot.custom import Field
-from bot.resources import PREFIXES
 
 
 class HelpCommand(commands.HelpCommand):
@@ -126,7 +125,7 @@ class HelpCommand(commands.HelpCommand):
                 )
 
                 fields.append(Field(category, category_commands))
-        embed = custom.Embed(title=self.context.command.name,
+        embed = custom.Embed(title="Help",
                              desc=desc,
                              fields=fields)
         await dest.send(embed=embed)
@@ -145,15 +144,31 @@ class Information(custom.Cog):
     def cog_unload(self):
         self.bot.help_command = self._original_help_command
 
+    def _format_prefixes(self, prefixes: tuple):
+        ret = []
+        added_mention = False
+
+        for prefix in prefixes:
+            prefix = f"{prefix}help"
+
+            if not self.mentions.match(prefix):
+                if added_mention:
+                    continue
+                added_mention = True
+                prefix = f"`{prefix}`"
+            ret.append(prefix)
+        return (", ").join(ret)
+
     # commands
     @commands.command()
     async def prefix(self, ctx):
         """
         Display the prefix(es) that the bot uses
         """
-        prefixes = (", ").join(f"`{v}help`" for v in PREFIXES)
+        prefixes = await self.bot.get_prefix(ctx.message)
+        formatted = self._format_prefixes(prefixes)
         await ctx.send(f"You can mention me or use any of the following "
-                       f"prefixes like so: {prefixes}")
+                       f"prefixes like so: {formatted}")
 
 
 def setup(bot):
