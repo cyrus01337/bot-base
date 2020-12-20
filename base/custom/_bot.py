@@ -8,9 +8,9 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-from bot import utils
-from bot import errors
-from bot.resources import PREFIXES
+from base import utils
+from base import errors
+from base.resources import PREFIXES
 
 
 class Bot(commands.Bot):
@@ -132,7 +132,7 @@ class Bot(commands.Bot):
                 cogs.append(path)
         return cogs
 
-    def load_extensions(self, path: str = "bot/cogs"):
+    def load_extensions(self, path: str = "base/cogs"):
         dotted = utils.resolve_path(path)
 
         for cog in self.get_cogs(path):
@@ -144,14 +144,14 @@ class Bot(commands.Bot):
                 self.load_extension(cog)
             except commands.ExtensionNotFound:
                 method = "[-] Skipped"
-            except commands.ExtensionAlreadyLoaded:
-                method = "[o] Loaded (Prior)"
             except commands.ExtensionError as error:
                 method = "[x] Failed"
 
                 if isinstance(error, commands.ExtensionFailed):
                     error = error.original
                 self.dispatch("startup_error", error)
+            except commands.ExtensionAlreadyLoaded:
+                continue
             finally:
                 print(f"{method} cog: {cog}")
 
