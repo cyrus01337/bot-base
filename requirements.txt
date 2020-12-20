@@ -1,4 +1,3 @@
 discord.py
 jishaku
 flake8
-vulture
