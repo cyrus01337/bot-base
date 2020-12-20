@@ -152,8 +152,7 @@ class Bot(commands.Bot):
                 if isinstance(error, commands.ExtensionFailed):
                     error = error.original
                 self.dispatch("startup_error", error)
-            finally:
-                print(f"{method} cog: {cog}")
+            print(f"{method} cog: {cog}")
 
     async def wait_for_display(self):
         if not self._display.is_set():
