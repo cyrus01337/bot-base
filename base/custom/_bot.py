@@ -3,7 +3,6 @@ import os
 from asyncio import Event
 from collections.abc import Iterable
 from json import dumps
-from typing import Union
 
 import aiohttp
 import discord
