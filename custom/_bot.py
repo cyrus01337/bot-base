@@ -142,6 +142,8 @@ class Bot(commands.Bot):
                 if cog != "jishaku":
                     cog = f"{dotted}.{cog}"
                 self.load_extension(cog)
+            except commands.ExtensionAlreadyLoaded:
+                continue
             except commands.ExtensionNotFound:
                 method = "[-] Skipped"
             except commands.ExtensionError as error:
@@ -150,8 +152,6 @@ class Bot(commands.Bot):
                 if isinstance(error, commands.ExtensionFailed):
                     error = error.original
                 self.dispatch("startup_error", error)
-            except commands.ExtensionAlreadyLoaded:
-                continue
             finally:
                 print(f"{method} cog: {cog}")
 
