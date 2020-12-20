@@ -140,6 +140,6 @@ cython_debug/
 # Custom
 .flake8
 TOKEN
-base/downloads/*
-!base/downloads/.gitkeep
+downloads/*
+!downloads/.gitkeep
 bot.py
