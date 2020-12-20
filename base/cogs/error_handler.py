@@ -4,7 +4,7 @@ import traceback
 import discord
 from discord.ext import commands
 
-from bot import custom
+from base import custom
 
 
 class ErrorHandler(custom.Cog):

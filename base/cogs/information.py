@@ -4,8 +4,8 @@ from typing import Union
 
 from discord.ext import commands
 
-from bot import custom
-from bot.custom import Field
+from base import custom
+from base.custom import Field
 
 
 class HelpCommand(commands.HelpCommand):
