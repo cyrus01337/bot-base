@@ -152,10 +152,12 @@ class Information(custom.Cog):
             prefix = f"{prefix}help"
 
             if not self.mentions.match(prefix):
-                if added_mention:
-                    continue
-                added_mention = True
                 prefix = f"`{prefix}`"
+            elif not added_mention:
+                added_mention = True
+            else:
+                continue
+            print("Added", prefix, added_mention, self.mentions.match(prefix))
             ret.append(prefix)
         return (", ").join(ret)
 
