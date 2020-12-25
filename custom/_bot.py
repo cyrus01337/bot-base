@@ -1,5 +1,7 @@
 import copy
 import os
+import sys
+import traceback
 from asyncio import Event
 from collections.abc import Iterable
 from json import dumps
@@ -161,7 +163,13 @@ class Bot(commands.Bot):
     @commands.Cog.listener()
     async def on_startup_error(self, error):
         await self.wait_for_display()
-        raise error
+        formatted = traceback.format_exception(
+            type(error),
+            error,
+            error.__traceback__
+        )
+        joined = ("").join(formatted)
+        print(joined, file=sys.stderr)
 
     # overwritable
     async def __ainit__(self):
