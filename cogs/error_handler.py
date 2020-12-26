@@ -47,8 +47,8 @@ class ErrorHandler(custom.Cog):
     async def output(self, etype, error, tb, *, ctx):
         formatted = ("").join(traceback.format_exception(etype, error, tb))
         embed = discord.Embed(description=f"```py\n"
-                              f"{formatted}\n"
-                              f"```")
+                                          f"{formatted}\n"
+                                          f"```")
 
         traceback.print_exception(etype, error, tb)
         try:
