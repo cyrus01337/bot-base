@@ -50,7 +50,7 @@ class ErrorHandler(custom.Cog):
                                           f"{formatted}\n"
                                           f"```")
 
-        traceback.print_exception(etype, error, tb)
+        traceback.print_exception(etype, error, tb, file=sys.stderr)
         try:
             await ctx.send(embed=embed)
         except discord.Forbidden:
