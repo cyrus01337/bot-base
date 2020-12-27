@@ -14,7 +14,7 @@ class ErrorHandler(custom.Cog):
             commands.CommandNotFound,
             commands.CheckFailure
         )
-        self.ignored_commands = dict()
+        self.ignored_commands = {}
 
         self._original_on_error = self.bot.on_error
         self.bot.on_error = self.on_error
@@ -22,13 +22,25 @@ class ErrorHandler(custom.Cog):
     def cog_unload(self, ctx):
         self.bot.on_error = self._original_on_error
 
-    def is_ignored(self, command, error):
+    def is_ignored(self, command: commands.Command, error: Exception):
         name = getattr(command, "name", command)
 
         return isinstance(
             error,
             self.ignored_commands.get(name, self.ignored)
         )
+
+    async def output(self, etype, error, tb, *, ctx):
+        formatted = ("").join(traceback.format_exception(etype, error, tb))
+        embed = discord.Embed(description=f"```py\n"
+                                          f"{formatted}\n"
+                                          f"```")
+
+        traceback.print_exception(etype, error, tb, file=sys.stderr)
+        try:
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            return
 
     async def on_error(self, event, initial, *args, **kwargs):
         ctx = None
@@ -43,18 +55,6 @@ class ErrorHandler(custom.Cog):
             else:
                 ctx = self.bot.error_log
         await self.output(*sys.exc_info(), ctx=ctx)
-
-    async def output(self, etype, error, tb, *, ctx):
-        formatted = ("").join(traceback.format_exception(etype, error, tb))
-        embed = discord.Embed(description=f"```py\n"
-                                          f"{formatted}\n"
-                                          f"```")
-
-        traceback.print_exception(etype, error, tb, file=sys.stderr)
-        try:
-            await ctx.send(embed=embed)
-        except discord.Forbidden:
-            return
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
