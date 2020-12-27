@@ -19,7 +19,7 @@ class ErrorHandler(custom.Cog):
         self._original_on_error = self.bot.on_error
         self.bot.on_error = self.on_error
 
-    def cog_unload(self):
+    def cog_unload(self, ctx):
         self.bot.on_error = self._original_on_error
 
     def is_ignored(self, command, error):
