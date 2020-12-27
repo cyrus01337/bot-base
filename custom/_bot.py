@@ -134,10 +134,12 @@ class Bot(commands.Bot):
                 cogs.append(path)
         return cogs
 
-    def load_extensions(self, path: str = "base/cogs"):
+    def load_extensions(self, path: str = "base/cogs", exclude: Iterable = ()):
         dotted = utils.resolve_path(path)
 
         for cog in self.get_cogs(path):
+            if cog in exclude:
+                continue
             method = "[ ] Loaded"
 
             try:
