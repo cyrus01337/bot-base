@@ -1,3 +1,5 @@
 [flake8]
+max_line_length = 80
+max_doc_length = 72
 ignore = W504
-exclude = __init__.py
+exclude = F401 __init__.py
