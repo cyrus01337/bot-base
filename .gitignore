@@ -138,7 +138,6 @@ dmypy.json
 cython_debug/
 
 # Custom
-.flake8
 TOKEN
 downloads/*
 !downloads/.gitkeep
