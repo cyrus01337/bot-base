@@ -2,4 +2,4 @@
 max_line_length = 80
 max_doc_length = 72
 ignore = W504
-exclude = F401 __init__.py
+extend-ignore = F401 __init__.py
