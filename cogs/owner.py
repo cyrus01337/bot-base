@@ -1,5 +1,7 @@
-import os
+from os.path import basename
+from urllib.parse import urlparse
 
+import aiofiles
 import discord
 from discord.ext import commands
 
@@ -10,25 +12,10 @@ class Owner(custom.Cog, hidden=True):
     def __init__(self, bot):
         self.bot = bot
 
-        self.indent = "  "
-        self.thumbs = {
-            True: "\U0001f44e",
-            False: "\U0001f44d"
-        }
-        self.permissions = discord.Permissions(administrator=True)
-
-    async def _download(self, url: str):
-        async with self.bot.session.get(url) as response:
-            if not (os.path.exists("downloads") and os.path.isdir("downloads")):
-                os.mkdir("downloads")
-            path = os.path.join("downloads", os.path.basename(url))
-
-            with open(path, "wb") as f:
-                chunk = await response.content.read(1024)
-
-                while chunk:
-                    f.write(chunk)
-                    chunk = await response.content.read(1024)
+        self.bot.invite_url = discord.utils.oauth_url(
+            self.bot.user.id,
+            permissions=self.bot.permissions
+        )
 
     # overwritten cog methods
     async def cog_check(self, ctx):
@@ -36,27 +23,30 @@ class Owner(custom.Cog, hidden=True):
 
     async def cog_before_invoke(self, ctx):
         if ctx.command.name == "close":
-            emoji = self.thumbs.get(False)
+            emoji = self.bot.emojis[False]
             await ctx.message.add_reaction(emoji)
 
     async def cog_after_invoke(self, ctx):
-        emoji = self.thumbs.get(ctx.command_failed)
-
-        if ctx.command_failed:
-            pass
+        emoji = self.bot.emojis.get(ctx.command_failed)
         await ctx.message.add_reaction(emoji)
 
     @commands.command(aliases=["dl", "get"])
     async def download(self, ctx, *urls):
         for url in urls:
-            print(url, type(url))
-            await self._download(url)
+            async with self.bot.session.get(url) as response:
+                parsed = urlparse(url)
+                filename = basename(parsed.path)
+
+                async with aiofiles.open(f"downloads/{filename}", "wb") as f:
+                    chunk = await response.content.read(1024)
+
+                    while chunk:
+                        await f.write(chunk)
+                        chunk = await response.content.read(1024)
 
     @commands.command()
     async def invite(self, ctx):
-        url = discord.utils.oauth_url(self.bot.user.id,
-                                      permissions=self.permissions)
-        await ctx.send(url, delete_after=3)
+        await ctx.send(self.bot.invite_url, delete_after=3)
 
     @commands.command()
     async def clear(self, ctx):
