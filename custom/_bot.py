@@ -11,8 +11,9 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-from base import utils
+# from base import cogs
 from base import errors
+from base import utils
 from base.resources import PREFIXES
 
 
@@ -35,10 +36,9 @@ class Bot(commands.Bot):
             )
         )
 
-        super().__init__(*args, **kwargs)
         self._display = Event()
         self.session = aiohttp.ClientSession()
-        self.emojis: Dict[bool, str] = kwargs.pop("emojis", {
+        self.reactions: Dict[bool, str] = kwargs.pop("reactions", {
             True: "\U0001f44e",
             False: "\U0001f44d"
         })
@@ -47,7 +47,7 @@ class Bot(commands.Bot):
             discord.Permissions()
         )
 
-        self.load_extensions()
+        super().__init__(*args, **kwargs)
         self._wrap_coroutines(self.__ainit__, self.display)
 
     @property
@@ -135,37 +135,43 @@ class Bot(commands.Bot):
         return None
 
     def get_cogs(self, path: str):
-        cogs = ["jishaku"]
+        ret = ["jishaku"]
 
         for file in os.listdir(path):
             if file.startswith("__") is False and file.endswith(".py"):
                 path = utils.resolve_path(file)
-                cogs.append(path)
-        return cogs
+                ret.append(path)
+        return ret
 
     def load_extensions(self, path: str = "base/cogs", exclude: Iterable = ()):
-        dotted = utils.resolve_path(path)
+        paths = [path]
 
-        for cog in self.get_cogs(path):
-            if cog in exclude:
-                continue
-            method = "[ ] Loaded"
+        if path != "base/cogs":
+            paths.append(path)
 
-            try:
-                if cog != "jishaku":
-                    cog = f"{dotted}.{cog}"
-                self.load_extension(cog)
-            except commands.ExtensionAlreadyLoaded:
-                continue
-            except commands.ExtensionNotFound:
-                method = "[-] Skipped"
-            except commands.ExtensionError as error:
-                method = "[x] Failed"
+        for cog_path in paths:
+            dotted = utils.resolve_path(cog_path)
 
-                if isinstance(error, commands.ExtensionFailed):
-                    error = error.original
-                self.dispatch("startup_error", error)
-            print(f"{method} cog: {cog}")
+            for cog in self.get_cogs(cog_path):
+                if cog in exclude:
+                    continue
+                method = "[ ] Loaded"
+
+                try:
+                    if cog != "jishaku":
+                        cog = f"{dotted}.{cog}"
+                    self.load_extension(cog)
+                except commands.ExtensionAlreadyLoaded:
+                    continue
+                except commands.ExtensionNotFound:
+                    method = "[-] Skipped"
+                except commands.ExtensionError as error:
+                    method = "[x] Failed"
+
+                    if isinstance(error, commands.ExtensionFailed):
+                        error = error.original
+                    self.dispatch("startup_error", error)
+                print(f"{method} cog: {cog}")
 
     async def wait_for_display(self):
         if not self._display.is_set():
@@ -186,10 +192,12 @@ class Bot(commands.Bot):
     async def __ainit__(self):
         pass
 
+    # overwritable
     def handle_display(self):
         if not self._display.is_set():
             self._display.set()
 
+    # overwritable
     @utils.when_ready
     async def display(self):
         utils.clear_screen()
@@ -203,6 +211,9 @@ class Bot(commands.Bot):
 
         if not autocompleted:
             await self.process_commands(message)
+
+    def load_extension(self, name):
+        return super().load_extension(name)
 
     def run(self, token=None, **kwargs):
         path = "./TOKEN"

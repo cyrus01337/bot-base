@@ -3,3 +3,5 @@ from .error_handler import ErrorHandler
 from .information import HelpCommand, Information
 from .owner import Owner
 from .testing import Testing
+
+ALL = {Template, ErrorHandler, Information, Owner, Testing}

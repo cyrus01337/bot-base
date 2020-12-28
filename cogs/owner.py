@@ -23,11 +23,11 @@ class Owner(custom.Cog, hidden=True):
 
     async def cog_before_invoke(self, ctx):
         if ctx.command.name == "close":
-            emoji = self.bot.emojis[False]
+            emoji = self.bot.reactions[False]
             await ctx.message.add_reaction(emoji)
 
     async def cog_after_invoke(self, ctx):
-        emoji = self.bot.emojis.get(ctx.command_failed)
+        emoji = self.bot.reactions.get(ctx.command_failed)
         await ctx.message.add_reaction(emoji)
 
     @commands.command(aliases=["dl", "get"])
