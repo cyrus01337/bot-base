@@ -12,6 +12,7 @@ from base import custom
 class ErrorHandler(custom.Cog):
     def __init__(self, bot):
         self.bot = bot
+
         self.ignored = {
             commands.CommandNotFound,
             commands.CheckFailure
@@ -28,6 +29,14 @@ class ErrorHandler(custom.Cog):
         name = getattr(command, "name", command)
         return isinstance(error, self.ignored_commands.get(name, self.ignored))
 
+    def _before_hook(self, messageable, error):
+        is_ignored_error = (isinstance(messageable, commands.Context) and
+                            self.is_ignored(messageable.command, error))
+
+        if is_ignored_error:
+            print(error)
+        return is_ignored_error
+
     async def _get_messageable(self, initial: Any):
         if isinstance(initial, discord.Message):
             return await self.bot.get_context(initial)
@@ -42,12 +51,6 @@ class ErrorHandler(custom.Cog):
     async def output(self,
                      messageable: Union[commands.Context, discord.TextChannel],
                      error):
-        error = getattr(error, "original", error)
-        is_ignored_error = (isinstance(messageable, commands.Context) and
-                            self.is_ignored(messageable.command, error))
-
-        if is_ignored_error:
-            return print(error)
         etype = type(error)
         tb = error.__traceback__
         formatted = ("").join(traceback.format_exception(etype, error, tb))
@@ -65,11 +68,15 @@ class ErrorHandler(custom.Cog):
         messageable = await self._get_messageable(initial)
         error = sys.exc_info()[1]
 
-        await self.output(messageable, error)
+        if not self._before_hook(messageable, error):
+            await self.output(messageable, error)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        await self.output(ctx, error)
+        error = getattr(error, "original", error)
+
+        if not self._before_hook(ctx, error):
+            await self.output(ctx, error)
 
 
 def setup(bot):
