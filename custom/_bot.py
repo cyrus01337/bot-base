@@ -5,6 +5,7 @@ import traceback
 from asyncio import Event
 from collections.abc import Iterable
 from json import dumps
+from typing import Dict
 
 import aiohttp
 import discord
@@ -37,6 +38,14 @@ class Bot(commands.Bot):
         super().__init__(*args, **kwargs)
         self._display = Event()
         self.session = aiohttp.ClientSession()
+        self.emojis: Dict[bool, str] = kwargs.pop("emojis", {
+            True: "\U0001f44e",
+            False: "\U0001f44d"
+        })
+        self.permissions: discord.Permissions = kwargs.pop(
+            "permissions",
+            discord.Permissions()
+        )
 
         self.load_extensions()
         self._wrap_coroutines(self.__ainit__, self.display)

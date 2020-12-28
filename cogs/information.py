@@ -139,7 +139,7 @@ class Information(custom.Cog):
 
         self._original_help_command = original
         self.bot = bot
-        self.mentions = re.compile(r"<@!?\d+> ")
+        self.mentions = re.compile(r"<@!?[0-9]+> ")
 
     def cog_unload(self):
         self.bot.help_command = self._original_help_command

@@ -1,5 +1,7 @@
 import sys
 import traceback
+from typing import Any
+from typing import Union
 
 import discord
 from discord.ext import commands
@@ -10,11 +12,11 @@ from base import custom
 class ErrorHandler(custom.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.ignored = (
+        self.ignored = {
             commands.CommandNotFound,
             commands.CheckFailure
-        )
-        self.ignored_commands = {}
+        }
+        self.ignored_commands = set()
 
         self._original_on_error = self.bot.on_error
         self.bot.on_error = self.on_error
@@ -24,13 +26,30 @@ class ErrorHandler(custom.Cog):
 
     def is_ignored(self, command: commands.Command, error: Exception):
         name = getattr(command, "name", command)
+        return isinstance(error, self.ignored_commands.get(name, self.ignored))
 
-        return isinstance(
-            error,
-            self.ignored_commands.get(name, self.ignored)
-        )
+    async def _get_messageable(self, initial: Any):
+        if isinstance(initial, discord.Message):
+            return await self.bot.get_context(initial)
+        else:
+            message_found = getattr(initial, "message", None)
 
-    async def output(self, etype, error, tb, *, ctx):
+            if message_found and isinstance(message_found, discord.Message):
+                return await self.bot.get_context(message_found)
+        return self.bot.error_log
+
+    # overwritable
+    async def output(self,
+                     messageable: Union[commands.Context, discord.TextChannel],
+                     error):
+        error = getattr(error, "original", error)
+        is_ignored_error = (isinstance(messageable, commands.Context) and
+                            self.is_ignored(messageable.command, error))
+
+        if is_ignored_error:
+            return print(error)
+        etype = type(error)
+        tb = error.__traceback__
         formatted = ("").join(traceback.format_exception(etype, error, tb))
         embed = discord.Embed(description=f"```py\n"
                                           f"{formatted}\n"
@@ -38,32 +57,19 @@ class ErrorHandler(custom.Cog):
 
         traceback.print_exception(etype, error, tb, file=sys.stderr)
         try:
-            await ctx.send(embed=embed)
+            await messageable.send(embed=embed)
         except discord.Forbidden:
-            return
+            pass
 
     async def on_error(self, event, initial, *args, **kwargs):
-        ctx = None
+        messageable = await self._get_messageable(initial)
+        error = sys.exc_info()[1]
 
-        if isinstance(initial, discord.Message):
-            ctx = await self.bot.get_context(initial)
-        else:
-            message_found = getattr(initial, "message", None)
-
-            if message_found and isinstance(message_found, discord.Message):
-                ctx = await self.bot.get_context(message_found)
-            else:
-                ctx = self.bot.error_log
-        await self.output(*sys.exc_info(), ctx=ctx)
+        await self.output(messageable, error)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        error = getattr(error, "original", error)
-
-        if self.is_ignored(ctx.command, error):
-            print(error)
-        else:
-            await self.output(type(error), error, error.__traceback__, ctx=ctx)
+        await self.output(ctx, error)
 
 
 def setup(bot):
