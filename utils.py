@@ -1,7 +1,8 @@
 import re
 import os
+import traceback
 
-multiple_spaces = re.compile(r" +")
+MULTIPLE_SPACES = re.compile(r" +")
 
 
 def resolve_path(path: str):
@@ -31,4 +32,16 @@ def when_ready(coroutine):
 
 
 def strip_multi_space(string: str):
-    return multiple_spaces.sub("", string)
+    return MULTIPLE_SPACES.sub("", string)
+
+
+def format_exception(error: Exception):
+    formatted = ("").join(traceback.format_exception(
+        type(error),
+        error,
+        error.__traceback__
+    ))
+
+    return (f"```py\n"
+            f"{formatted}\n"
+            f"```")

@@ -1,4 +1,5 @@
 import copy
+import inspect
 import os
 import sys
 import traceback
@@ -49,6 +50,17 @@ class Bot(commands.Bot):
 
         super().__init__(*args, **kwargs)
         self._wrap_coroutines(self.__ainit__, self.display)
+
+    def __init_subclass__(cls):
+        ainit = getattr(cls, "__ainit__", None)
+
+        if ainit and inspect.iscoroutinefunction(ainit):
+            cls.__ainit__ = utils.when_ready(ainit)
+
+    # overwritable
+    @utils.when_ready
+    async def __ainit__(self):
+        pass
 
     @property
     def home(self):
@@ -139,27 +151,24 @@ class Bot(commands.Bot):
 
         for file in os.listdir(path):
             if file.startswith("__") is False and file.endswith(".py"):
-                path = utils.resolve_path(file)
-                ret.append(path)
+                resolved_path = utils.resolve_path(os.path.join(path, file))
+                ret.append(resolved_path)
         return ret
 
     def load_extensions(self, path: str = "base/cogs", exclude: Iterable = ()):
-        paths = [path]
+        paths = []
 
         if path != "base/cogs":
-            paths.append(path)
+            paths.append("base/cogs")
+        paths.append(path)
 
         for cog_path in paths:
-            dotted = utils.resolve_path(cog_path)
-
             for cog in self.get_cogs(cog_path):
                 if cog in exclude:
                     continue
                 method = "[ ] Loaded"
 
                 try:
-                    if cog != "jishaku":
-                        cog = f"{dotted}.{cog}"
                     self.load_extension(cog)
                 except commands.ExtensionAlreadyLoaded:
                     continue
@@ -187,10 +196,6 @@ class Bot(commands.Bot):
         )
         joined = ("").join(formatted)
         print(joined, file=sys.stderr)
-
-    # overwritable
-    async def __ainit__(self):
-        pass
 
     # overwritable
     def handle_display(self):
