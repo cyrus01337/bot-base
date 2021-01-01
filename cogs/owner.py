@@ -17,7 +17,6 @@ class Owner(custom.Cog, hidden=True):
             permissions=self.bot.permissions
         )
 
-    # overwritten cog methods
     async def cog_check(self, ctx):
         return await self.bot.is_owner(ctx.author)
 

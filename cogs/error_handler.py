@@ -1,12 +1,12 @@
 import sys
 import traceback
-from typing import Any
-from typing import Union
+from typing import Set, Union
 
 import discord
 from discord.ext import commands
 
-from base import custom
+from base import custom, utils
+from base.typings import Destination
 
 
 class ErrorHandler(custom.Cog):
@@ -17,65 +17,69 @@ class ErrorHandler(custom.Cog):
             commands.CommandNotFound,
             commands.CheckFailure
         }
-        self.ignored_commands = set()
+        self.ignored_commands: Set[str] = set()
 
         self._original_on_error = self.bot.on_error
         self.bot.on_error = self.on_error
 
-    def cog_unload(self, ctx):
+    def cog_unload(self):
         self.bot.on_error = self._original_on_error
 
-    def is_ignored(self, command: commands.Command, error: Exception):
-        name = getattr(command, "name", command)
-        return isinstance(error, self.ignored_commands.get(name, self.ignored))
+    def _is_ignored(self, command_name: str, error: Exception):
+        return command_name in self.ignored_commands
 
-    def _before_hook(self, messageable, error):
-        is_ignored_error = (isinstance(messageable, commands.Context) and
-                            self.is_ignored(messageable.command, error))
+    # overwritable
+    def before_hook(self,
+                    medium: Union[str, Destination],
+                    error: Exception):
+        if isinstance(medium, str):
+            return self._is_ignored(medium, error)
+        return True
 
-        if is_ignored_error:
-            print(error)
-        return is_ignored_error
+    # overwritable
+    async def get_destination(self,
+                              initial: discord.Object,
+                              default: discord.TextChannel = None):
+        message = getattr(initial, "message", initial)
 
-    async def _get_messageable(self, initial: Any):
-        if isinstance(initial, discord.Message):
-            return await self.bot.get_context(initial)
-        else:
-            message_found = getattr(initial, "message", None)
+        if isinstance(message, discord.Message):
+            return await self.bot.get_context(message)
+        return default
 
-            if message_found and isinstance(message_found, discord.Message):
-                return await self.bot.get_context(message_found)
-        return self.bot.error_log
+    # overwritable
+    def format_exception(self, error: Exception):
+        return utils.format_exception(error)
 
     # overwritable
     async def output(self,
-                     messageable: Union[commands.Context, discord.TextChannel],
+                     destination: Union[commands.Context, discord.TextChannel],
                      error):
         etype = type(error)
         tb = error.__traceback__
-        formatted = ("").join(traceback.format_exception(etype, error, tb))
+        formatted = self.format_exception(etype, error, tb)
         embed = discord.Embed(description=f"```py\n"
                                           f"{formatted}\n"
                                           f"```")
 
         traceback.print_exception(etype, error, tb, file=sys.stderr)
         try:
-            await messageable.send(embed=embed)
+            await destination.send(embed=embed)
         except discord.Forbidden:
             pass
 
     async def on_error(self, event, initial, *args, **kwargs):
-        messageable = await self._get_messageable(initial)
+        destination = await self.get_destination(initial,
+                                                 default=self.bot.error_log)
         error = sys.exc_info()[1]
 
-        if not self._before_hook(messageable, error):
-            await self.output(messageable, error)
+        if error is not None and not self.before_hook(destination, error):
+            await self.output(destination, error)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         error = getattr(error, "original", error)
 
-        if not self._before_hook(ctx, error):
+        if not self.before_hook(ctx.command.name, error):
             await self.output(ctx, error)
 
 
