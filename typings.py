@@ -8,5 +8,5 @@ class Literals:
     destination = (commands.Context, discord.TextChannel)
 
 
-Destination = Union[Literals.desination]
+Destination = Union[Literals.destination]
 literals = Literals
