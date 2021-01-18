@@ -3,17 +3,12 @@ from abc import ABCMeta
 from discord.ext import commands
 
 
-def _modify_args(args: tuple, kwargs: dict):
-    command_attrs = kwargs.get("command_attrs", None)
-
-    if command_attrs:
-        command_attrs.setdefault("hidden", kwargs.get("Hidden", False))
-    return args, kwargs
-
-
 class CogMeta(commands.CogMeta, ABCMeta):
     def __call__(cls, *args, **kwargs):
-        args, kwargs = _modify_args(args, kwargs)
+        command_attrs = kwargs.get("command_attrs", None)
+
+        if command_attrs:
+            command_attrs.setdefault("hidden", kwargs.get("hidden", False))
         obj = cls.__new__(cls, *args, **kwargs)
 
         for base in cls.__mro__[:-3]:
@@ -24,3 +19,8 @@ class CogMeta(commands.CogMeta, ABCMeta):
 class Cog(commands.Cog, metaclass=CogMeta):
     def __init_subclass__(cls, hidden: bool = False):
         cls.hidden = hidden
+
+
+class Template(Cog):
+    def __init__(self, bot: commands.Bot):
+        pass
