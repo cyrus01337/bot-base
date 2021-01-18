@@ -1,13 +1,12 @@
 from collections.abc import Iterable
-from typing import Union
 
 from discord.ext import commands
 
 from .embed import Embed, Field
+from base.typings import Command
 
 
 class HelpCommand(commands.HelpCommand):
-    MEDIUM = Union[commands.Command, commands.Group]
     DEFAULT_HELP = "\U0000203c `No help message provided.`"
 
     def pass_dest(method):
@@ -19,8 +18,6 @@ class HelpCommand(commands.HelpCommand):
         super().__init__(command_attrs={
             "help": "Show command/category_commands information"
         })
-        self.command_not_found = self.subcommand_not_found = self._pass
-        self.send_error_message = self._apass
 
     # helper functions
     def _format(self, string, iterable: Iterable):
@@ -33,10 +30,10 @@ class HelpCommand(commands.HelpCommand):
             return string
         return first.upper() + string[1:]
 
-    def _get_help(self, command: MEDIUM):
+    def _get_help(self, command: Command):
         return self.DEFAULT_HELP if command.help is None else command.help
 
-    def _get_aliases(self, command: MEDIUM):
+    def _get_aliases(self, command: Command):
         return self._format(", ", command.aliases)
 
     def _sort_mapping(self, mapping):
@@ -52,12 +49,6 @@ class HelpCommand(commands.HelpCommand):
         is_owner = self.context.author.id == self.context.bot.owner_id
 
         return (is_owner is False and command.hidden is False) or is_owner
-
-    def _pass(self, *_):
-        pass
-
-    async def _apass(self, *_):
-        pass
 
     # overridden methods
     def get_command_signature(self, command):
