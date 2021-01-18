@@ -1,19 +1,18 @@
 import sys
-import traceback
-from typing import Set, Union
+from typing import Optional, Set, Union
 
 import discord
 from discord.ext import commands
 
-from base import custom, utils
-from base.typings import Destination
+from base import custom, typings, utils
+from base.typings import Destination, overwritable
 
 
-class ErrorHandler(custom.Cog):
+class ErrorHandler(custom.Template):
     def __init__(self, bot):
         self.bot = bot
 
-        self.ignored = {
+        self.ignored_errors = {
             commands.CommandNotFound,
             commands.CheckFailure
         }
@@ -25,16 +24,31 @@ class ErrorHandler(custom.Cog):
     def cog_unload(self):
         self.bot.on_error = self._original_on_error
 
-    def _is_ignored(self, command_name: str, error: Exception):
-        return command_name in self.ignored_commands
+    async def _error_base(self, error, *, ctx=None):
+        medium = None
+        error = getattr(error, "original", error)
+
+        if ctx:
+            medium = ctx.command.name
+
+        if not self.before_hook(error, medium):
+            await self.output(error)
 
     # overwritable
     def before_hook(self,
-                    medium: Union[str, Destination],
-                    error: Exception):
+                    error: Exception,
+                    medium: Optional[Union[str, Destination]] = None):
         if isinstance(medium, str):
-            return self._is_ignored(medium, error)
-        return True
+            if medium in self.ignored_commands:
+                return True
+        elif isinstance(medium, typings.literal.Destination):
+            return False
+        return type(error) in self.ignored_errors
+
+    # overwritable
+    def format_exception(self, error: Exception):
+        message = utils.format_exception(error)
+        return utils.codeblock(message)
 
     # overwritable
     async def get_destination(self,
@@ -47,40 +61,35 @@ class ErrorHandler(custom.Cog):
         return default
 
     # overwritable
-    def format_exception(self, error: Exception):
-        return utils.format_exception(error)
-
-    # overwritable
     async def output(self,
-                     destination: Union[commands.Context, discord.TextChannel],
-                     error):
-        etype = type(error)
-        tb = error.__traceback__
-        formatted = self.format_exception(etype, error, tb)
-        embed = discord.Embed(description=f"```py\n"
-                                          f"{formatted}\n"
-                                          f"```")
+                     error,
+                     destination: Optional[Destination] = None):
+        formatted = self.format_exception(error)
+        embed = discord.Embed(description=formatted)
 
-        traceback.print_exception(etype, error, tb, file=sys.stderr)
-        try:
-            await destination.send(embed=embed)
-        except discord.Forbidden:
-            pass
+        print(formatted, file=sys.stderr)
+        if destination:
+            try:
+                await destination.send(embed=embed)
+            except discord.Forbidden:
+                pass
+
+    @overwritable
+    async def on_base_error(self, error: Exception):
+        if not self.before_hook(error):
+            await self._error_base(error)
 
     async def on_error(self, event, initial, *args, **kwargs):
         destination = await self.get_destination(initial,
                                                  default=self.bot.error_log)
         error = sys.exc_info()[1]
 
-        if error is not None and not self.before_hook(destination, error):
-            await self.output(destination, error)
+        if error is not None and not self.before_hook(error, destination):
+            await self.output(error, destination)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        error = getattr(error, "original", error)
-
-        if not self.before_hook(ctx.command.name, error):
-            await self.output(ctx, error)
+        await self._error_base(error, ctx=ctx)
 
 
 def setup(bot):

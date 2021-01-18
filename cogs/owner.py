@@ -12,7 +12,13 @@ class Owner(custom.Cog, hidden=True):
     def __init__(self, bot):
         self.bot = bot
 
-        self.bot.invite_url = discord.utils.oauth_url(
+        self.invite_url: str = None
+
+        self.bot.loop.create_task(self.__ainit__())
+
+    async def __ainit__(self):
+        await self.bot.wait_until_ready()
+        self.invite_url = discord.utils.oauth_url(
             self.bot.user.id,
             permissions=self.bot.permissions
         )
