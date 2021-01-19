@@ -14,4 +14,4 @@ def overwritable(method):
 
 Destination = Union[Literals.destination]
 Command = Union[commands.Command, commands.Group]
-literals = Literals
+literal = Literals

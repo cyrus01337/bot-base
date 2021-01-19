@@ -1,5 +1,6 @@
 from os.path import basename
 from urllib.parse import urlparse
+from typing import Dict
 
 import aiofiles
 import discord
@@ -8,11 +9,15 @@ from discord.ext import commands
 from base import custom
 
 
-class Owner(custom.Cog, hidden=True):
-    def __init__(self, bot):
+class Owner(custom.Template, hidden=True):
+    def __init__(self, bot, **kwargs):
         self.bot = bot
 
         self.invite_url: str = None
+        self.reactions: Dict[bool, str] = kwargs.get("reactions", {
+            True: "\U0001f44e",
+            False: "\U0001f44d"
+        })
 
         self.bot.loop.create_task(self.__ainit__())
 
@@ -28,11 +33,11 @@ class Owner(custom.Cog, hidden=True):
 
     async def cog_before_invoke(self, ctx):
         if ctx.command.name == "close":
-            emoji = self.bot.reactions[False]
+            emoji = self.reactions[False]
             await ctx.message.add_reaction(emoji)
 
     async def cog_after_invoke(self, ctx):
-        emoji = self.bot.reactions.get(ctx.command_failed)
+        emoji = self.reactions.get(ctx.command_failed)
         await ctx.message.add_reaction(emoji)
 
     @commands.command(aliases=["dl", "get"])

@@ -9,14 +9,14 @@ from base.typings import Destination, overwritable
 
 
 class ErrorHandler(custom.Template):
-    def __init__(self, bot):
+    def __init__(self, bot, **kwargs):
         self.bot = bot
 
-        self.ignored_errors = {
+        self.ignored_errors: Set[Exception] = kwargs.get("errors", {
             commands.CommandNotFound,
             commands.CheckFailure
-        }
-        self.ignored_commands: Set[str] = set()
+        })
+        self.ignored_commands: Set[str] = kwargs.get("commands", set())
 
         self._original_on_error = self.bot.on_error
         self.bot.on_error = self.on_error
@@ -34,23 +34,23 @@ class ErrorHandler(custom.Template):
         if not self.before_hook(error, medium):
             await self.output(error)
 
-    # overwritable
+    @overwritable
     def before_hook(self,
                     error: Exception,
                     medium: Optional[Union[str, Destination]] = None):
         if isinstance(medium, str):
             if medium in self.ignored_commands:
                 return True
-        elif isinstance(medium, typings.literal.Destination):
+        elif isinstance(medium, typings.literal.destination):
             return False
         return type(error) in self.ignored_errors
 
-    # overwritable
+    @overwritable
     def format_exception(self, error: Exception):
         message = utils.format_exception(error)
         return utils.codeblock(message)
 
-    # overwritable
+    @overwritable
     async def get_destination(self,
                               initial: discord.Object,
                               default: discord.TextChannel = None):
@@ -60,7 +60,7 @@ class ErrorHandler(custom.Template):
             return await self.bot.get_context(message)
         return default
 
-    # overwritable
+    @overwritable
     async def output(self,
                      error,
                      destination: Optional[Destination] = None):

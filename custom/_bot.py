@@ -2,7 +2,7 @@ import copy
 import os
 import sys
 from asyncio import Event, Task
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 import aiohttp
 import discord
@@ -35,13 +35,9 @@ class Bot(commands.Bot):
 
         self._on_ready_tasks: List[Task] = []
         self._display = Event()
-        self.home_id: int = kwargs.pop("home_id", None)
-        self.error_log_id: int = kwargs.pop("error_log_id", None)
+        self.home_id: int = kwargs.pop("home", None)
+        self.error_log_id: int = kwargs.pop("error_log", None)
         self.mentions: Tuple[str] = None
-        self.reactions: Dict[bool, str] = kwargs.pop("reactions", {
-            True: "\U0001f44e",
-            False: "\U0001f44d"
-        })
         self.session = aiohttp.ClientSession()
         self.permissions: discord.Permissions = kwargs.pop(
             "permissions",
