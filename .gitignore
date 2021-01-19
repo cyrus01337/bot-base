@@ -141,4 +141,5 @@ cython_debug/
 TOKEN
 downloads/*
 !downloads/.gitkeep
-_dev/
+/_*.py
+!/__init__.py
