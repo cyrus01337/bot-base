@@ -10,17 +10,13 @@ from discord.ext import commands
 
 from base import errors
 from base import utils
-from base.resources import PREFIXES
 from base.typings import overwritable
 
 
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("intents", discord.Intents.all())
-        kwargs.setdefault(
-            "command_prefix",
-            commands.when_mentioned_or(*PREFIXES)
-        )
+        kwargs.setdefault("command_prefix", commands.when_mentioned())
         kwargs.setdefault(
             "allowed_mentions",
             discord.AllowedMentions(everyone=False, roles=False)
@@ -29,7 +25,7 @@ class Bot(commands.Bot):
             "activity",
             discord.Activity(
                 type=discord.ActivityType.listening,
-                name="@Administrator prefix"
+                name="pings"
             )
         )
 
@@ -184,10 +180,6 @@ class Bot(commands.Bot):
             await self._display.wait()
 
     def load_extension(self, name):
-        # module = importlib.import_module(name)
-
-        # print(module, (", ").join(dir(module)))
-
         super().load_extension(name)
 
     def run(self, token=None, **kwargs):
