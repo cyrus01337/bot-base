@@ -1,4 +1,6 @@
 import copy
+import importlib
+import inspect
 import os
 import sys
 from asyncio import Event, Task
@@ -8,8 +10,10 @@ import aiohttp
 import discord
 from discord.ext import commands
 
+import custom
 from base import errors
 from base import utils
+from base.cogs import Template, ALL
 from base.typings import overwritable
 
 
@@ -99,6 +103,17 @@ class Bot(commands.Bot):
                 ret.append(resolved_path)
         return ret
 
+    def _get_inherited_cog(self, cog: Template):
+        for template_cog in ALL:
+            if isinstance(cog, template_cog):
+                return template_cog
+        return None
+
+    def _unload_inherited_cog(self, original: custom.Cog):
+        reversed_ = {v: k for k, v in self.bot.cogs}
+        key = reversed_.get(original)
+        self.bot.cogs.pop(key)
+
     async def _autocomplete_command(self, message):
         prefixes = tuple(self.command_prefix(self, message))
 
@@ -179,7 +194,24 @@ class Bot(commands.Bot):
         if not self._display.is_set():
             await self._display.wait()
 
+    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L659-L661
+    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L601-L625
     def load_extension(self, name):
+        try:
+            module = importlib.import_module(name)
+        except ModuleNotFoundError:
+            raise commands.ExtensionNotFound(name)
+        except Exception as error:
+            raise commands.ExtensionFailed(name, error)
+        classes = inspect.getmembers(module, inspect.isclass)
+
+        # can turn into function, naming unsure
+        for cls in classes:
+            if isinstance(cls, Template):
+                original = self._get_inherited_cog(cls)
+
+                if original:
+                    self._unload_inherited_cog(original)
         super().load_extension(name)
 
     def run(self, token=None, **kwargs):
