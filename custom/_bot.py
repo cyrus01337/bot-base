@@ -31,6 +31,7 @@ class Bot(commands.Bot):
 
         self._on_ready_tasks: List[Task] = []
         self._display = Event()
+        self.shutdown = False
         self.home_id: int = kwargs.pop("home", None)
         self.error_log_id: int = kwargs.pop("error_log", None)
         self.mentions: Tuple[str] = None
@@ -46,6 +47,7 @@ class Bot(commands.Bot):
             task.add_done_callback(self._startup_error)
 
             self._on_ready_tasks.append(task)
+        self.add_check(self.shutdown_check)
 
     @overwritable
     @utils.when_ready()
@@ -168,6 +170,9 @@ class Bot(commands.Bot):
     def trigger_display(self):
         if not self._display.is_set():
             self._display.set()
+
+    def shutdown_check(self):
+        return not self.shutdown
 
     async def default_display(self):
         utils.clear_screen()
