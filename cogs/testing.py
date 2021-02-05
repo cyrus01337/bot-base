@@ -20,6 +20,15 @@ class Testing(custom.Cog):
     async def public_test(self, ctx):
         await ctx.send("Working!")
 
+    @commands.command()
+    async def shutdown(self, ctx):
+        """
+        If the bot ever does some dumb shit then use this
+        """
+        self.bot.shutdown = True
+
+        await ctx.send(f"{self.bot.user.name} has been locally shutdown")
+
 
 def setup(bot):
     bot.add_cog(Testing(bot))

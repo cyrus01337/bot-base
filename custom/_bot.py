@@ -1,26 +1,27 @@
+import asyncio
 import copy
 import importlib
 import inspect
+import operator
 import os
-import sys
-from asyncio import Event, Task
-from typing import List, Tuple
+# import sys
+from types import ModuleType
+from typing import Dict, List, Tuple
 
 import aiohttp
 import discord
 from discord.ext import commands
 
-import custom
+from .cog import Cog, Template
 from base import errors
 from base import utils
-from base.cogs import Template, ALL
 from base.typings import overwritable
 
 
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("intents", discord.Intents.all())
-        kwargs.setdefault("command_prefix", commands.when_mentioned())
+        kwargs.setdefault("command_prefix", commands.when_mentioned)
         kwargs.setdefault(
             "allowed_mentions",
             discord.AllowedMentions(everyone=False, roles=False)
@@ -33,11 +34,16 @@ class Bot(commands.Bot):
             )
         )
 
-        self._on_ready_tasks: List[Task] = []
-        self._display = Event()
+        self._on_ready_tasks: List[asyncio.Task] = []
+        self._exclusions = ["jishaku"]
+        self._display = asyncio.Event()
+        self.shutdown = False
+        self.silent = kwargs.pop("silent", False)
         self.home_id: int = kwargs.pop("home", None)
         self.error_log_id: int = kwargs.pop("error_log", None)
         self.mentions: Tuple[str] = None
+        self.base_extensions: Dict[str, ModuleType] = {}
+        self.base_cogs: Dict[str, Cog] = {}
         self.session = aiohttp.ClientSession()
         self.permissions: discord.Permissions = kwargs.pop(
             "permissions",
@@ -45,6 +51,8 @@ class Bot(commands.Bot):
         )
 
         super().__init__(*args, **kwargs)
+        self.add_check(self.shutdown_check)
+
         for coroutine in (self.__ainit__, self.display):
             task = self.loop.create_task(coroutine())
             task.add_done_callback(self._startup_error)
@@ -80,39 +88,40 @@ class Bot(commands.Bot):
             self.dispatch("startup_error", error)
 
     def _strip_prefix(self, content, prefixes):
-        match_found = None
+        match_found: str = None
+        prefixes = filter(content.startswith, prefixes)
 
         for prefix in prefixes:
-            if content.startswith(prefix):
-                # in the instance of having multiple, simiar prefixes,
-                # this grabs both a prefix serving as the initial match
-                # and the longest possible prefix able to be matched
-                if not match_found or len(prefix) > len(match_found):
-                    match_found = prefix
+            # in the instance of having multiple, simiar prefixes,
+            # this grabs both a prefix serving as the initial match
+            # and the longest possible prefix able to be matched
+            if not match_found or len(prefix) > len(match_found):
+                match_found = prefix
 
         if match_found:
             return content[len(match_found):]
         raise ValueError(f'prefix cannot be stripped from "{content}"')
 
     def _get_cogs(self, path: str):
-        ret = ["jishaku"]
+        ret = []
 
-        for file in os.listdir(path):
-            if file.startswith("__") is False and file.endswith(".py"):
-                resolved_path = utils.resolve_path(os.path.join(path, file))
-                ret.append(resolved_path)
+        if path in self._exclusions:
+            ret.append(path)
+        # elif not os.path.exists(path):
+        #     raise error
+        else:
+            for file in os.listdir(path):
+                if file.startswith("__") is False and file.endswith(".py"):
+                    joined = os.path.join(path, file)
+                    resolved_path = utils.resolve_path(joined)
+                    ret.append(resolved_path)
         return ret
 
-    def _get_inherited_cog(self, cog: Template):
-        for template_cog in ALL:
-            if isinstance(cog, template_cog):
-                return template_cog
+    def _get_cog_path(self, cog: commands.Cog):
+        for path, extension in self.extensions.items():
+            if cog.__class__ in inspect.getmembers(extension):
+                return path
         return None
-
-    def _unload_inherited_cog(self, original: custom.Cog):
-        reversed_ = {v: k for k, v in self.bot.cogs}
-        key = reversed_.get(original)
-        self.bot.cogs.pop(key)
 
     async def _autocomplete_command(self, message):
         prefixes = tuple(self.command_prefix(self, message))
@@ -153,12 +162,19 @@ class Bot(commands.Bot):
                                 return command
         return None
 
-    def load_extensions(self, path: str = "base/cogs", silent: bool = False):
-        paths = []
+    def log(self, message):
+        if not self.silent:
+            print(message)
+
+    def load_extensions(self,
+                        path: str = "base/cogs",
+                        jishaku: bool = True):
+        paths = ["base/cogs"]
 
         if path != "base/cogs":
-            paths.append("base/cogs")
-        paths.append(path)
+            paths.append(path)
+        if jishaku:
+            paths.append("jishaku")
 
         for cog_path in paths:
             for cog in self._get_cogs(cog_path):
@@ -176,13 +192,14 @@ class Bot(commands.Bot):
                     if isinstance(error, commands.ExtensionFailed):
                         error = error.original
                     self.dispatch("startup_error", error)
-
-                if not silent:
-                    print(f"{method} cog: {cog}")
+                self.log(f"{method} cog: {cog}")
 
     def trigger_display(self):
         if not self._display.is_set():
             self._display.set()
+
+    def shutdown_check(self):
+        return not self.bot.shutdown
 
     async def default_display(self):
         utils.clear_screen()
@@ -194,24 +211,51 @@ class Bot(commands.Bot):
         if not self._display.is_set():
             await self._display.wait()
 
-    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L659-L661
-    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L601-L625
+    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L656-L661
+    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L603-L609
     def load_extension(self, name):
+        if name in self.extensions:
+            raise commands.ExtensionAlreadyLoaded(name)
+
         try:
             module = importlib.import_module(name)
         except ModuleNotFoundError:
             raise commands.ExtensionNotFound(name)
         except Exception as error:
             raise commands.ExtensionFailed(name, error)
-        classes = inspect.getmembers(module, inspect.isclass)
 
-        # can turn into function, naming unsure
-        for cls in classes:
-            if isinstance(cls, Template):
-                original = self._get_inherited_cog(cls)
+        def predicate(cls):
+            return issubclass(cls, commands.Cog)
 
-                if original:
-                    self._unload_inherited_cog(original)
+        classes = map(
+            operator.itemgetter(1),
+            inspect.getmembers(module, inspect.isclass)
+        )
+        cog_class = discord.utils.find(predicate, classes)
+
+        if not cog_class:
+            print("Returned")
+            return
+        print("Subclassed:", issubclass(cog_class, Template))
+        if issubclass(cog_class, Template):
+            for cog in self.cogs.values():
+                print(
+                    cog_class,
+                    cog.__class__,
+                    cog_class.__mro__,
+                    isinstance(cog, cog_class),
+                    issubclass(cog.__class__, Template),
+                    issubclass(cog_class, cog.__class__),
+                    sep=", ",
+                    end="\n\n"
+                )
+                if issubclass(cog_class, cog.__class__):
+                    path = self._get_cog_path(cog)
+                    print("Path:", path)
+
+                    if path:
+                        self.unload_extension(path)
+                        self.log(f'[=] Ejected cog: {cog.qualified_name}')
         super().load_extension(name)
 
     def run(self, token=None, **kwargs):
@@ -237,12 +281,6 @@ class Bot(commands.Bot):
             await self.invoke(ctx)
         elif not autocompleted:
             await self.process_commands(message)
-
-    @commands.Cog.listener()
-    async def on_startup_error(self, error):
-        await self.wait_for_display()
-        message = utils.format_exception(error)
-        print(message, file=sys.stderr)
 
     async def close(self):
         for task in self._on_ready_tasks:

@@ -1,1 +1,1 @@
-from . import cogs, custom, errors, resources, typings, utils
+from . import cogs, custom, errors, typings, utils
