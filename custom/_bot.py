@@ -1,10 +1,10 @@
 import asyncio
+import contextlib
 import copy
-import importlib
-import inspect
-import operator
 import os
-# import sys
+from collections import OrderedDict
+from collections.abc import Iterable
+from pathlib import Path
 from types import ModuleType
 from typing import Dict, List, Tuple
 
@@ -12,7 +12,7 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-from .cog import Cog, Template
+from .cog import Cog
 from base import errors
 from base import utils
 from base.typings import overwritable
@@ -34,9 +34,13 @@ class Bot(commands.Bot):
             )
         )
 
+        self._mystbin = None
         self._on_ready_tasks: List[asyncio.Task] = []
         self._exclusions = ["jishaku"]
+        self._edit_cache: Dict[int, discord.Message] = OrderedDict()
         self._display = asyncio.Event()
+        self._edit_cache_maximum = kwargs.pop("max_edit_messages", 1000)
+
         self.shutdown = False
         self.silent = kwargs.pop("silent", False)
         self.home_id: int = kwargs.pop("home", None)
@@ -79,6 +83,15 @@ class Bot(commands.Bot):
     def error_log(self):
         return self.home.get_channel(self.error_log_id)
 
+    @property
+    def mystbin(self):
+        if not self._mystbin:
+            with contextlib.suppress(ModuleNotFoundError):
+                import mystbin
+
+                self._mystbin = mystbin.Client()
+        return self._mystbin
+
     def _startup_error(self, future):
         if future.cancelled():
             return
@@ -102,29 +115,19 @@ class Bot(commands.Bot):
             return content[len(match_found):]
         raise ValueError(f'prefix cannot be stripped from "{content}"')
 
-    def _get_cogs(self, path: str):
-        ret = []
+    def _get_edit_cached_message(self, message_id: int):
+        message_found = self._edit_cache.get(message_id, None)
 
-        if path in self._exclusions:
-            ret.append(path)
-        # elif not os.path.exists(path):
-        #     raise error
-        else:
-            for file in os.listdir(path):
-                if file.startswith("__") is False and file.endswith(".py"):
-                    joined = os.path.join(path, file)
-                    resolved_path = utils.resolve_path(joined)
-                    ret.append(resolved_path)
-        return ret
-
-    def _get_cog_path(self, cog: commands.Cog):
-        for path, extension in self.extensions.items():
-            if cog.__class__ in inspect.getmembers(extension):
-                return path
-        return None
+        if not message_found:
+            if len(self._edit_cache) == self._edit_cache_maximum:
+                self._edit_cache.popitem(last=False)
+        return message_found
 
     async def _autocomplete_command(self, message):
-        prefixes = tuple(self.command_prefix(self, message))
+        prefixes = await self.get_prefix(message)
+
+        if isinstance(prefixes, Iterable) and not isinstance(prefixes, str):
+            prefixes = tuple(prefixes)
 
         if message.content.startswith(prefixes):
             name = self._strip_prefix(message.content, prefixes)
@@ -166,40 +169,22 @@ class Bot(commands.Bot):
         if not self.silent:
             print(message)
 
-    def load_extensions(self,
-                        path: str = "base/cogs",
-                        jishaku: bool = True):
-        paths = ["base/cogs"]
+    def load_base_extensions(self, **exclusions):
+        path = Path(__file__).parent / "../cogs"
+        resolved = path.resolve()
+        repo_name = resolved.parent.name
 
-        if path != "base/cogs":
-            paths.append(path)
-        if jishaku:
-            paths.append("jishaku")
-
-        for cog_path in paths:
-            for cog in self._get_cogs(cog_path):
-                method = "[ ] Loaded"
-
-                try:
-                    self.load_extension(cog)
-                except commands.ExtensionAlreadyLoaded:
-                    continue
-                except commands.ExtensionNotFound:
-                    method = "[-] Skipped"
-                except commands.ExtensionError as error:
-                    method = "[x] Failed"
-
-                    if isinstance(error, commands.ExtensionFailed):
-                        error = error.original
-                    self.dispatch("startup_error", error)
-                self.log(f"{method} cog: {cog}")
+        for file in resolved.glob("[!__]*.py"):
+            self.load_extension(f"{repo_name}.cogs.{file.name[:-3]}")
 
     def trigger_display(self):
         if not self._display.is_set():
             self._display.set()
 
-    def shutdown_check(self):
-        return not self.bot.shutdown
+    async def shutdown_check(self, ctx):
+        if self.shutdown:
+            return await self.is_owner(ctx.author)
+        return True
 
     async def default_display(self):
         utils.clear_screen()
@@ -214,49 +199,19 @@ class Bot(commands.Bot):
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L656-L661
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L603-L609
     def load_extension(self, name):
-        if name in self.extensions:
-            raise commands.ExtensionAlreadyLoaded(name)
+        method = "[ ] Loaded"
 
         try:
-            module = importlib.import_module(name)
-        except ModuleNotFoundError:
-            raise commands.ExtensionNotFound(name)
-        except Exception as error:
-            raise commands.ExtensionFailed(name, error)
+            super().load_extension(name)
+        except (commands.ExtensionAlreadyLoaded, commands.ExtensionNotFound):
+            method = "[-] Skipped"
+        except commands.ExtensionError as error:
+            method = "[x] Failed"
 
-        def predicate(cls):
-            return issubclass(cls, commands.Cog)
-
-        classes = map(
-            operator.itemgetter(1),
-            inspect.getmembers(module, inspect.isclass)
-        )
-        cog_class = discord.utils.find(predicate, classes)
-
-        if not cog_class:
-            print("Returned")
-            return
-        print("Subclassed:", issubclass(cog_class, Template))
-        if issubclass(cog_class, Template):
-            for cog in self.cogs.values():
-                print(
-                    cog_class,
-                    cog.__class__,
-                    cog_class.__mro__,
-                    isinstance(cog, cog_class),
-                    issubclass(cog.__class__, Template),
-                    issubclass(cog_class, cog.__class__),
-                    sep=", ",
-                    end="\n\n"
-                )
-                if issubclass(cog_class, cog.__class__):
-                    path = self._get_cog_path(cog)
-                    print("Path:", path)
-
-                    if path:
-                        self.unload_extension(path)
-                        self.log(f'[=] Ejected cog: {cog.qualified_name}')
-        super().load_extension(name)
+            if isinstance(error, commands.ExtensionFailed):
+                error = error.original
+            self.dispatch("startup_error", error)
+        self.log(f"{method} cog: {name}")
 
     def run(self, token=None, **kwargs):
         path = "./TOKEN"
