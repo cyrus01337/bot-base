@@ -62,6 +62,7 @@ class Bot(commands.Bot):
             task.add_done_callback(self._startup_error)
 
             self._on_ready_tasks.append(task)
+        self.add_check(self.shutdown_check)
 
     @overwritable
     @utils.when_ready()
