@@ -170,7 +170,6 @@ class Bot(commands.Bot):
             print(message)
 
     def load_base_extensions(self, *, exclude: Iterable[str]):
-        print(__file__)
         path = Path(__file__) / "../../cogs"
         resolved = path.resolve()
         repo_name = resolved.parent.name
