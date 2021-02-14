@@ -1,13 +1,18 @@
+import asyncio
+import contextlib
 import copy
 import os
-import sys
-from asyncio import Event, Task
-from typing import List, Tuple
+from collections import OrderedDict
+from collections.abc import Iterable
+from pathlib import Path
+from types import ModuleType
+from typing import Dict, List, Tuple
 
 import aiohttp
 import discord
 from discord.ext import commands
 
+from .cog import Cog
 from base import errors
 from base import utils
 from base.typings import overwritable
@@ -16,7 +21,7 @@ from base.typings import overwritable
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("intents", discord.Intents.all())
-        kwargs.setdefault("command_prefix", commands.when_mentioned())
+        kwargs.setdefault("command_prefix", commands.when_mentioned)
         kwargs.setdefault(
             "allowed_mentions",
             discord.AllowedMentions(everyone=False, roles=False)
@@ -29,12 +34,20 @@ class Bot(commands.Bot):
             )
         )
 
-        self._on_ready_tasks: List[Task] = []
-        self._display = Event()
+        self._mystbin = None
+        self._on_ready_tasks: List[asyncio.Task] = []
+        self._exclusions = ["jishaku"]
+        self._edit_cache: Dict[int, discord.Message] = OrderedDict()
+        self._display = asyncio.Event()
+        self._edit_cache_maximum = kwargs.pop("max_edit_messages", 1000)
+
         self.shutdown = False
+        self.silent = kwargs.pop("silent", False)
         self.home_id: int = kwargs.pop("home", None)
         self.error_log_id: int = kwargs.pop("error_log", None)
         self.mentions: Tuple[str] = None
+        self.base_extensions: Dict[str, ModuleType] = {}
+        self.base_cogs: Dict[str, Cog] = {}
         self.session = aiohttp.ClientSession()
         self.permissions: discord.Permissions = kwargs.pop(
             "permissions",
@@ -42,6 +55,8 @@ class Bot(commands.Bot):
         )
 
         super().__init__(*args, **kwargs)
+        self.add_check(self.shutdown_check)
+
         for coroutine in (self.__ainit__, self.display):
             task = self.loop.create_task(coroutine())
             task.add_done_callback(self._startup_error)
@@ -69,6 +84,15 @@ class Bot(commands.Bot):
     def error_log(self):
         return self.home.get_channel(self.error_log_id)
 
+    @property
+    def mystbin(self):
+        if not self._mystbin:
+            with contextlib.suppress(ModuleNotFoundError):
+                import mystbin
+
+                self._mystbin = mystbin.Client()
+        return self._mystbin
+
     def _startup_error(self, future):
         if future.cancelled():
             return
@@ -78,31 +102,33 @@ class Bot(commands.Bot):
             self.dispatch("startup_error", error)
 
     def _strip_prefix(self, content, prefixes):
-        match_found = None
+        match_found: str = None
+        prefixes = filter(content.startswith, prefixes)
 
         for prefix in prefixes:
-            if content.startswith(prefix):
-                # in the instance of having multiple, simiar prefixes,
-                # this grabs both a prefix serving as the initial match
-                # and the longest possible prefix able to be matched
-                if not match_found or len(prefix) > len(match_found):
-                    match_found = prefix
+            # in the instance of having multiple, simiar prefixes,
+            # this grabs both a prefix serving as the initial match
+            # and the longest possible prefix able to be matched
+            if not match_found or len(prefix) > len(match_found):
+                match_found = prefix
 
         if match_found:
             return content[len(match_found):]
         raise ValueError(f'prefix cannot be stripped from "{content}"')
 
-    def _get_cogs(self, path: str):
-        ret = ["jishaku"]
+    def _get_edit_cached_message(self, message_id: int):
+        message_found = self._edit_cache.get(message_id, None)
 
-        for file in os.listdir(path):
-            if file.startswith("__") is False and file.endswith(".py"):
-                resolved_path = utils.resolve_path(os.path.join(path, file))
-                ret.append(resolved_path)
-        return ret
+        if not message_found:
+            if len(self._edit_cache) == self._edit_cache_maximum:
+                self._edit_cache.popitem(last=False)
+        return message_found
 
     async def _autocomplete_command(self, message):
-        prefixes = tuple(self.command_prefix(self, message))
+        prefixes = await self.get_prefix(message)
+
+        if isinstance(prefixes, Iterable) and not isinstance(prefixes, str):
+            prefixes = tuple(prefixes)
 
         if message.content.startswith(prefixes):
             name = self._strip_prefix(message.content, prefixes)
@@ -140,39 +166,27 @@ class Bot(commands.Bot):
                                 return command
         return None
 
-    def load_extensions(self, path: str = "base/cogs", silent: bool = False):
-        paths = []
+    def log(self, message):
+        if not self.silent:
+            print(message)
 
-        if path != "base/cogs":
-            paths.append("base/cogs")
-        paths.append(path)
+    def load_base_extensions(self, *, exclude: Iterable[str]):
+        path = Path(__file__) / "../../cogs"
+        resolved = path.resolve()
+        repo_name = resolved.parent.name
 
-        for cog_path in paths:
-            for cog in self._get_cogs(cog_path):
-                method = "[ ] Loaded"
-
-                try:
-                    self.load_extension(cog)
-                except commands.ExtensionAlreadyLoaded:
-                    continue
-                except commands.ExtensionNotFound:
-                    method = "[-] Skipped"
-                except commands.ExtensionError as error:
-                    method = "[x] Failed"
-
-                    if isinstance(error, commands.ExtensionFailed):
-                        error = error.original
-                    self.dispatch("startup_error", error)
-
-                if not silent:
-                    print(f"{method} cog: {cog}")
+        for file in resolved.glob("[!__]*.py"):
+            if file.name not in exclude:
+                self.load_extension(f"{repo_name}.cogs.{file.name[:-3]}")
 
     def trigger_display(self):
         if not self._display.is_set():
             self._display.set()
 
-    def shutdown_check(self):
-        return not self.shutdown
+    async def shutdown_check(self, ctx):
+        if self.shutdown:
+            return await self.is_owner(ctx.author)
+        return True
 
     async def default_display(self):
         utils.clear_screen()
@@ -184,8 +198,22 @@ class Bot(commands.Bot):
         if not self._display.is_set():
             await self._display.wait()
 
+    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L656-L661
+    # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L603-L609
     def load_extension(self, name):
-        super().load_extension(name)
+        method = "[ ] Loaded"
+
+        try:
+            super().load_extension(name)
+        except (commands.ExtensionAlreadyLoaded, commands.ExtensionNotFound):
+            method = "[-] Skipped"
+        except commands.ExtensionError as error:
+            method = "[x] Failed"
+
+            if isinstance(error, commands.ExtensionFailed):
+                error = error.original
+            self.dispatch("startup_error", error)
+        self.log(f"{method} cog: {name}")
 
     def run(self, token=None, **kwargs):
         path = "./TOKEN"
@@ -210,12 +238,6 @@ class Bot(commands.Bot):
             await self.invoke(ctx)
         elif not autocompleted:
             await self.process_commands(message)
-
-    @commands.Cog.listener()
-    async def on_startup_error(self, error):
-        await self.wait_for_display()
-        message = utils.format_exception(error)
-        print(message, file=sys.stderr)
 
     async def close(self):
         for task in self._on_ready_tasks:

@@ -19,8 +19,3 @@ class CogMeta(commands.CogMeta, ABCMeta):
 class Cog(commands.Cog, metaclass=CogMeta):
     def __init_subclass__(cls, hidden: bool = False):
         cls.hidden = hidden
-
-
-class Template(Cog):
-    def __init__(self, bot: commands.Bot):
-        pass
