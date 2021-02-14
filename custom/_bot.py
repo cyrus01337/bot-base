@@ -169,13 +169,14 @@ class Bot(commands.Bot):
         if not self.silent:
             print(message)
 
-    def load_base_extensions(self, **exclusions):
+    def load_base_extensions(self, *exclusions: str):
         path = Path(__file__).parent / "../cogs"
         resolved = path.resolve()
         repo_name = resolved.parent.name
 
         for file in resolved.glob("[!__]*.py"):
-            self.load_extension(f"{repo_name}.cogs.{file.name[:-3]}")
+            if file.name not in exclusions:
+                self.load_extension(f"{repo_name}.cogs.{file.name[:-3]}")
 
     def trigger_display(self):
         if not self._display.is_set():
