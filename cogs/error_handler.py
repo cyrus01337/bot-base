@@ -1,3 +1,4 @@
+import contextlib
 import sys
 from typing import Optional, Set, Text, Tuple, Union
 
@@ -8,7 +9,7 @@ from base import custom, typings, utils
 from base.typings import Destination, overwritable
 
 
-class ErrorHandler(custom.Template):
+class ErrorHandler(custom.Cog):
     def __init__(self, bot, **kwargs):
         self.bot = bot
 
@@ -72,15 +73,13 @@ class ErrorHandler(custom.Template):
         embed = discord.Embed(description=formatted)
 
         if destination:
-            try:
+            with contextlib.suppress(discord.HTTPException):
                 await destination.send(embed=embed)
-            except discord.Forbidden:
-                pass
 
-    # @overwritable
-    # async def on_base_error(self, error: Exception):
-    #     if not self.before_hook(error):
-    #         await self._error_base(error)
+    @overwritable
+    async def on_base_error(self, error: Exception):
+        if not self.before_hook(error):
+            await self._error_base(error)
 
     async def on_error(self, event, initial, *args, **kwargs):
         destination = await self.get_destination(initial,

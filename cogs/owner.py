@@ -9,7 +9,7 @@ from discord.ext import commands
 from base import custom
 
 
-class Owner(custom.Template, hidden=True):
+class Owner(custom.Cog, hidden=True):
     def __init__(self, bot, **kwargs):
         self.bot = bot
 
