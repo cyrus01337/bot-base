@@ -1,3 +1,4 @@
+import contextlib
 import json
 import re
 import os
@@ -5,22 +6,11 @@ import traceback
 from functools import wraps
 from typing import Callable, Iterable, Union
 
+import discord
+
 from base import errors
 
 MULTIPLE_SPACES = re.compile(r" +")
-
-
-def resolve_path(path: str):
-    data = (
-        ("./", ""),
-        ("/", "."),
-        ("\\", "."),
-        (".py", "")
-    )
-
-    for substr, repl in data:
-        path = path.replace(substr, repl)
-    return path
 
 
 def clear_screen():
@@ -83,3 +73,12 @@ def has_intents(**intents):
             return method(*args, **kwargs)
         return inner
     return outer
+
+
+async def clear_reactions(message: discord.Message):
+    try:
+        await message.clear_reactions()
+    except discord.Forbidden:
+        with contextlib.suppress(discord.HTTPException):
+            for reaction in message.reactions:
+                await message.remove_reaction(reaction, message.guild.me)
