@@ -5,16 +5,15 @@ import os
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
-from types import ModuleType
-from typing import Dict, List, Tuple
+from typing import Container, Dict, List, Tuple, Union
 
 import aiohttp
 import discord
 from discord.ext import commands
 
-from .cog import Cog
 from base import errors
 from base import utils
+from base.utils import Flags
 from base.typings import overwritable
 
 
@@ -35,34 +34,47 @@ class Bot(commands.Bot):
         )
 
         self._mystbin = None
-        self._on_ready_tasks: List[asyncio.Task] = []
+        self._shutdown = False
         self._exclusions = ["jishaku"]
-        self._edit_cache: Dict[int, discord.Message] = OrderedDict()
         self._display = asyncio.Event()
+        self._on_ready_tasks: List[asyncio.Task] = []
+        self._edit_cache: Dict[int, discord.Message] = OrderedDict()
         self._edit_cache_maximum = kwargs.pop("max_edit_messages", 1000)
 
-        self.shutdown = False
-        self.silent = kwargs.pop("silent", False)
         self.home_id: int = kwargs.pop("home", None)
         self.error_log_id: int = kwargs.pop("error_log", None)
+        self.autocomplete: bool = kwargs.pop("autocomplete", True)
+        self.silent: bool = kwargs.pop("silent", False)
+        self.no_flags: bool = kwargs.pop("no_flags", False)
+        self.excluded_extensions: Container = kwargs.pop("exclude", [])
         self.mentions: Tuple[str] = None
-        self.base_extensions: Dict[str, ModuleType] = {}
-        self.base_cogs: Dict[str, Cog] = {}
         self.session = aiohttp.ClientSession()
         self.permissions: discord.Permissions = kwargs.pop(
             "permissions",
             discord.Permissions()
         )
 
-        super().__init__(*args, **kwargs)
-        self.add_check(self.shutdown_check)
+        if not self.no_flags:
+            Flags(hide=True,
+                  no_underscore=True,
+                  no_dm_traceback=True)
 
-        for coroutine in (self.__ainit__, self.display):
+        super().__init__(*args, **kwargs)
+        self.add_check(self._shutdown_check)
+
+        if self.excluded_extensions:
+            self.load_base_extensions(exclude=self.excluded_extensions)
+
+        for coroutine in (self.__core_ainit__, self.__ainit__, self.display):
             task = self.loop.create_task(coroutine())
             task.add_done_callback(self._startup_error)
 
             self._on_ready_tasks.append(task)
-        self.add_check(self.shutdown_check)
+        self.add_check(self._shutdown_check)
+
+    @utils.when_ready()
+    async def __core_ainit__(self):
+        self.mentions = (f"<@{self.user.id}>", f"<@!{self.user.id}>")
 
     @overwritable
     @utils.when_ready()
@@ -124,69 +136,89 @@ class Bot(commands.Bot):
                 self._edit_cache.popitem(last=False)
         return message_found
 
+    def _resolve_to_base_path(self, path: Path):
+        root = Path.cwd()
+        return path.relative_to(root)
+
+    async def _shutdown_check(self, ctx):
+        if self._shutdown:
+            return await self.is_owner(ctx.author)
+        return True
+
     async def _autocomplete_command(self, message):
-        prefixes = await self.get_prefix(message)
+        if self.autocomplete:
+            prefixes = await self.get_prefix(message)
+            prefix_iterable = (isinstance(prefixes, Iterable) and
+                               not isinstance(prefixes, str))
 
-        if isinstance(prefixes, Iterable) and not isinstance(prefixes, str):
-            prefixes = tuple(prefixes)
+            if prefix_iterable:
+                prefixes = tuple(prefixes)
 
-        if message.content.startswith(prefixes):
-            name = self._strip_prefix(message.content, prefixes)
+            if message.content.startswith(prefixes):
+                name = self._strip_prefix(message.content, prefixes)
 
-            if name != "":
-                command_found = self.get_command(name)
+                if name != "":
+                    command_found = self.get_command(name)
 
-                if command_found:
-                    ctx = await self.get_context(message)
+                    if command_found:
+                        ctx = await self.get_context(message)
 
-                    print(f'Autocompleted to "{ctx.command.name}"')
-                    await self.invoke(ctx)
-                    return command_found
-                else:
-                    for command in self.commands:
-                        command_names = (
-                            command.name.lower(),
-                            *command.aliases
-                        )
+                        print(f'Autocompleted to "{ctx.command.name}"')
+                        await self.invoke(ctx)
+                        return command_found
+                    else:
+                        for command in self.commands:
+                            command_names = (
+                                command.name.lower(),
+                                *command.aliases
+                            )
 
-                        for command_name in command_names:
-                            autocompleted = command_name == name \
-                                or command_name.startswith(name)
+                            for command_name in command_names:
+                                autocompleted = command_name == name \
+                                    or command_name.startswith(name)
 
-                            if autocompleted:
-                                alt_message = copy.copy(message)
-                                alt_content = alt_message.content.replace(
-                                    name,
-                                    command_name
-                                )
-                                alt_message.content = alt_content
-                                ctx = await self.get_context(alt_message)
+                                if autocompleted:
+                                    alt_message = copy.copy(message)
+                                    alt_content = alt_message.content.replace(
+                                        name,
+                                        command_name
+                                    )
+                                    alt_message.content = alt_content
+                                    ctx = await self.get_context(alt_message)
 
-                                await self.invoke(ctx)
-                                return command
-        return None
+                                    await self.invoke(ctx)
+                                    return command
+            return None
 
     def log(self, message):
         if not self.silent:
             print(message)
 
-    def load_base_extensions(self, *, exclude: Iterable[str]):
-        path = Path(__file__) / "../../cogs"
-        resolved = path.resolve()
-        repo_name = resolved.parent.name
+    def load_extensions(self,
+                        path: Union[Path, str], *,
+                        exclude: Container[str] = [],
+                        recurse: bool = False):
+        if isinstance(path, str):
+            path = Path(path)
+        path = path.resolve()
+        glob = path.glob
 
-        for file in resolved.glob("[!__]*.py"):
+        if recurse:
+            glob = path.rglob
+
+        for file in glob("[!__]*.py"):
             if file.name not in exclude:
-                self.load_extension(f"{repo_name}.cogs.{file.name[:-3]}")
+                base_path = self._resolve_to_base_path(file)
+                resolved = utils.dotted(base_path)
+                self.load_extension(resolved)
+
+    def load_base_extensions(self, *, exclude=[]):
+        base_path = Path(__file__) / "../../cogs"
+        self.load_extensions(base_path, exclude=exclude)
 
     def trigger_display(self):
         if not self._display.is_set():
             self._display.set()
-
-    async def shutdown_check(self, ctx):
-        if self.shutdown:
-            return await self.is_owner(ctx.author)
-        return True
 
     async def default_display(self):
         utils.clear_screen()
@@ -195,8 +227,7 @@ class Bot(commands.Bot):
         self.trigger_display()
 
     async def wait_for_display(self):
-        if not self._display.is_set():
-            await self._display.wait()
+        await self._display.wait()
 
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L656-L661
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L603-L609
@@ -231,7 +262,7 @@ class Bot(commands.Bot):
         autocompleted = await self._autocomplete_command(message)
 
         if self.mentions and message.content in self.mentions:
-            alt_message = copy(message)
+            alt_message = copy.copy(message)
             alt_message.content = f"{message.content} help"
             ctx = await self.get_context(alt_message)
 
