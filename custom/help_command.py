@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterable
 
 from discord.ext import commands
@@ -36,19 +37,22 @@ class HelpCommand(commands.HelpCommand):
     def _get_aliases(self, command: Command):
         return self._format(", ", command.aliases)
 
-    def _sort_mapping(self, mapping):
-        mapping.setdefault("Uncategorised", mapping[None])
-        del mapping[None]
-        return sorted(mapping.items(), key=self.key)
-
-    def key(self, data):
+    def _key(self, data):
         cog = data[0]
         return getattr(cog, "qualified_name", cog)
+
+    def _sort_mapping(self, mapping):
+        mapping.setdefault("Uncategorised", mapping.pop(None))
+
+        if os.environ.get("JISHAKU_HIDE", False):
+            jishaku = self.context.bot.get_cog("Jishaku")
+            del mapping[jishaku]
+        return sorted(mapping.items(), key=self._key)
 
     def filter(self, command):
         is_owner = self.context.author.id == self.context.bot.owner_id
 
-        return (is_owner is False and command.hidden is False) or is_owner
+        return (is_owner is command.hidden is False) or is_owner
 
     # overridden methods
     def get_command_signature(self, command):
