@@ -7,7 +7,7 @@ from base import utils
 # https://github.com/platform-discord/travis-bott/blob/master/utils/customcontext.py#L33-L79
 class Context(commands.Context):
     async def send(self, *args, **kwargs):
-        if self.bot.shutdown and not await self.bot.shutdown_check(ctx=self):
+        if self.bot._shutdown and not await self.bot._shutdown_check(ctx=self):
             return print("[S] Bot has been locally shutdown")
         is_owner = await self.bot.is_owner(self.author)
         message = self.message
