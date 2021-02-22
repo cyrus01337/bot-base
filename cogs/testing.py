@@ -25,7 +25,7 @@ class Testing(custom.Cog):
         """
         If the bot ever does some dumb shit then use this
         """
-        self.bot.shutdown = True
+        self.bot._shutdown = True
 
         await ctx.send(f"{self.bot.user.name} has been locally shutdown")
 
