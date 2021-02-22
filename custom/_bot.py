@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import copy
 import os
+import sys
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
@@ -228,6 +229,11 @@ class Bot(commands.Bot):
 
     async def wait_for_display(self):
         await self._display.wait()
+
+    async def on_startup_error(self, error):
+        await self.wait_for_display()
+        message = utils.format_exception(error)
+        print(message, file=sys.stderr)
 
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L656-L661
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L603-L609

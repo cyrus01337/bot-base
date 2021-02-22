@@ -93,12 +93,6 @@ class ErrorHandler(custom.Cog):
     async def on_command_error(self, ctx, error):
         await self._error_base(error, ctx=ctx)
 
-    @commands.Cog.listener()
-    async def on_startup_error(self, error):
-        await self.bot.wait_for_display()
-        message = utils.format_exception(error)
-        print(message, file=sys.stderr)
-
 
 def setup(bot):
     bot.add_cog(ErrorHandler(bot))
