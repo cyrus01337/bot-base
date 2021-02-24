@@ -191,9 +191,9 @@ class Bot(commands.Bot):
                                     return command
             return None
 
-    async def _invoke_split_commands(self,
-                                     message: discord.Message,
-                                     payload: List[str]):
+    async def _process_multi_commands(self,
+                                      message: discord.Message,
+                                      payload: List[str]):
         prefix: str = None
 
         for content in payload:
@@ -205,8 +205,8 @@ class Bot(commands.Bot):
             ctx = await self.get_context(alt_message)
 
             if ctx.valid:
-                if not prefix:
-                    prefix = ctx.prefix
+                prefix = ctx.prefix
+
                 await self.invoke(ctx)
 
     def log(self, message):
@@ -293,7 +293,7 @@ class Bot(commands.Bot):
 
             await self.invoke(ctx)
         elif split:
-            await self._invoke_split_commands(message, split)
+            await self._process_multi_commands(message, split)
         elif not autocompleted:
             await self.process_commands(message)
 
