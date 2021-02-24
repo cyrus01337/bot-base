@@ -99,7 +99,7 @@ class Owner(custom.Cog, hidden=True):
         alt_message.content = ctx.prefix + self._update_command
         alt_ctx = await self.bot.get_context(alt_message)
 
-        await self.invoke(alt_ctx)
+        await self.bot.invoke(alt_ctx)
 
         print(flags)
         if not flags.pop("no-shutdown", False):
