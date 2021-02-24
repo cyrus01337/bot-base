@@ -294,7 +294,7 @@ class Bot(commands.Bot):
             alt_message.content = f"{message.content} prefix"
             ctx = await self.get_context(alt_message)
 
-            await self.invoke(ctx)
+            await self.bot.invoke(ctx)
         elif split:
             await self._process_multi_commands(message, split)
         elif not autocompleted:
