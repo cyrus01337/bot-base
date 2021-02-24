@@ -15,7 +15,12 @@ class Owner(custom.Cog, hidden=True):
         self.bot = bot
 
         self._original_get_context = self.bot.get_context
-        self._update_command = "jishaku sh git pull --recurse-submodules=yes"
+        self._update_command = (
+            "jishaku sh git pull --all --recurse-submodules=yes;"
+            "cd ./base;"
+            "git checkout tweaks;"
+            "cd .."
+        )
         self.bot.get_context = self.get_context
         self.invite_url: str = None
         self.reactions: Dict[bool, str] = kwargs.get("reactions", {
