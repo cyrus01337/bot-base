@@ -19,6 +19,7 @@ class Owner(custom.Cog, hidden=True):
             "jishaku sh git pull --recurse-submodules=yes;"
             "cd ./base;"
             "git checkout tweaks;"
+            "git pull;"
             "cd .."
         )
         self.bot.get_context = self.get_context
