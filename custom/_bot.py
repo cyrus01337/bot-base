@@ -194,21 +194,18 @@ class Bot(commands.Bot):
     async def _process_multi_commands(self, message, payload: List[str]):
         prefix: str = None
 
-        print(payload)
         for content in payload:
-            print(prefix, content)
-
             if prefix:
                 content = f"{prefix}content"
 
             alt_message = copy.copy(message)
             alt_message.content = content
             ctx = await self.get_context(alt_message)
-            print(ctx.valid, end="\n\n")
 
+            if not ctx.valid:
+                continue
             if ctx.prefix and not prefix:
                 prefix = ctx.prefix
-
             await self.invoke(ctx)
 
     def log(self, message):
@@ -287,7 +284,6 @@ class Bot(commands.Bot):
     async def on_message(self, message):
         split = message.content.split("; ")
         autocompleted = await self._autocomplete_command(message)
-        print(split)
 
         if self.mentions and message.content in self.mentions:
             alt_message = copy.copy(message)
