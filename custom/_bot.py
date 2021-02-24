@@ -191,6 +191,17 @@ class Bot(commands.Bot):
                                     return command
             return None
 
+    async def _invoke_split_commands(self,
+                                      message: discord.Message,
+                                      payload: List[str]):
+        for content in payload:
+            alt_message = copy.copy(message)
+            alt_message.content = content
+            ctx = await self.get_context(alt_message)
+
+            if ctx.valid:
+                await self.invoke(ctx)
+
     def log(self, message):
         if not self.silent:
             print(message)
@@ -265,14 +276,17 @@ class Bot(commands.Bot):
         super().run(token, **kwargs)
 
     async def on_message(self, message):
+        split = message.content.split("; ")
         autocompleted = await self._autocomplete_command(message)
 
         if self.mentions and message.content in self.mentions:
             alt_message = copy.copy(message)
-            alt_message.content = f"{message.content} help"
+            alt_message.content = f"{message.content} prefix"
             ctx = await self.get_context(alt_message)
 
             await self.invoke(ctx)
+        elif split:
+            await self._invoke_split_commands(message, split)
         elif not autocompleted:
             await self.process_commands(message)
 
