@@ -16,10 +16,10 @@ class Owner(custom.Cog, hidden=True):
 
         self._original_get_context = self.bot.get_context
         self._update_command = (
-            "jishaku sh git pull --recurse-submodules=yes;"
-            "cd ./base;"
-            "git checkout tweaks;"
-            "git pull;"
+            "jishaku sh git pull --recurse-submodules=yes; "
+            "cd ./base; "
+            "git checkout tweaks; "
+            "git pull; "
             "cd .."
         )
         self.bot.get_context = self.get_context
