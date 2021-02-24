@@ -101,7 +101,7 @@ class Owner(custom.Cog, hidden=True):
 
         await self.bot.invoke(alt_ctx)
 
-        if flags.pop("no_shutdown"):
+        if not flags.pop("no_shutdown"):
             await self.bot.close()
 
     @commands.command()
