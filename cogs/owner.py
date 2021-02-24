@@ -1,10 +1,11 @@
-from os.path import basename
+import copy
+import os
 from urllib.parse import urlparse
 from typing import Dict
 
 import aiofiles
 import discord
-from discord.ext import commands
+from discord.ext import commands, flags
 
 from base import custom
 
@@ -14,6 +15,7 @@ class Owner(custom.Cog, hidden=True):
         self.bot = bot
 
         self._original_get_context = self.bot.get_context
+        self._update_command = "git pull --recurse-submodules=yes"
         self.bot.get_context = self.get_context
         self.invite_url: str = None
         self.reactions: Dict[bool, str] = kwargs.get("reactions", {
@@ -67,7 +69,7 @@ class Owner(custom.Cog, hidden=True):
         for url in urls:
             async with self.bot.session.get(url) as response:
                 parsed = urlparse(url)
-                filename = basename(parsed.path)
+                filename = os.path.basename(parsed.path)
 
                 async with aiofiles.open(f"downloads/{filename}", "wb") as f:
                     chunk = await response.content.read(1024)
@@ -83,6 +85,19 @@ class Owner(custom.Cog, hidden=True):
     @commands.command()
     async def clear(self, ctx):
         await self.bot.display()
+
+    @flags.add_flag("--no-shutdown", "-n", action="store_true")
+    @flags.command()
+    async def update(self, ctx, **flags):
+        alt_message = copy.copy(ctx.message)
+        alt_message.content = f"{ctx.prefix}jishaku sh {self._update_command}"
+        alt_ctx = await self.bot.get_context(alt_message)
+
+        await self.invoke(alt_ctx)
+
+        print(flags)
+        if not flags.pop("no-shutdown", False):
+            await self.bot.close()
 
     @commands.command()
     async def close(self, ctx):

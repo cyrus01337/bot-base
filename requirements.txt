@@ -1,3 +1,4 @@
 aiofiles
 discord.py
 git+https://github.com/Gorialis/jishaku.git
+discord-flags
