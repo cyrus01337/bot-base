@@ -15,7 +15,7 @@ class Owner(custom.Cog, hidden=True):
         self.bot = bot
 
         self._original_get_context = self.bot.get_context
-        self._update_command = "git pull --recurse-submodules=yes"
+        self._update_command = "jishaku sh git pull --recurse-submodules=yes"
         self.bot.get_context = self.get_context
         self.invite_url: str = None
         self.reactions: Dict[bool, str] = kwargs.get("reactions", {
@@ -86,11 +86,11 @@ class Owner(custom.Cog, hidden=True):
     async def clear(self, ctx):
         await self.bot.display()
 
-    @flags.add_flag("--no-shutdown", "-n", action="store_true")
+    @flags.add_flag("--no-shutdown", action="store_true")
     @flags.command()
     async def update(self, ctx, **flags):
         alt_message = copy.copy(ctx.message)
-        alt_message.content = f"{ctx.prefix}jishaku sh {self._update_command}"
+        alt_message.content = ctx.prefix + self._update_command
         alt_ctx = await self.bot.get_context(alt_message)
 
         await self.invoke(alt_ctx)
