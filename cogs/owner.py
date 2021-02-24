@@ -92,7 +92,7 @@ class Owner(custom.Cog, hidden=True):
     async def clear(self, ctx):
         await self.bot.display()
 
-    @flags.add_flag("--no-shutdown", action="store_true")
+    @flags.add_flag("--no-shutdown", action="store_false")
     @flags.command()
     async def update(self, ctx, **flags):
         alt_message = copy.copy(ctx.message)
@@ -101,8 +101,7 @@ class Owner(custom.Cog, hidden=True):
 
         await self.bot.invoke(alt_ctx)
 
-        print(flags)
-        if not flags.pop("no-shutdown", False):
+        if flags.pop("no_shutdown"):
             await self.bot.close()
 
     @commands.command()
