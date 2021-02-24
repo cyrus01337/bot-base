@@ -155,10 +155,10 @@ class Flags:
             os.environ[flag] = "True"
 
         for flag, value in mapping.items():
-            flag = flag.lower()
+            flag = flag.upper()
 
-            if flag != "scope_prefix":
-                flag = f"jishaku_{flag}"
+            if flag != "SCOPE_PREFIX":
+                flag = f"JISHAKU_{flag}"
             os.environ[flag] = str(value)
 
 
