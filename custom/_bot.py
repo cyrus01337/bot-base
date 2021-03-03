@@ -306,9 +306,9 @@ class Bot(commands.Bot):
         if self.mentions and message.content in self.mentions:
             alt_message = copy.copy(message)
             alt_message.content = f"{message.content} prefix"
-            ctx = await self.get_context(alt_message)
+            alt_ctx = await self.get_context(alt_message)
 
-            await self.bot.invoke(ctx)
+            await self.bot.invoke(alt_ctx)
         elif self._is_multi(ctx, message.content):
             await self.process_multi_commands(message)
         elif not autocompleted:
