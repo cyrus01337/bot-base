@@ -6,7 +6,7 @@ import sys
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Container, Dict, List, Set, Union
+from typing import Dict, List, Set, Union
 
 import aiohttp
 import discord
@@ -23,6 +23,7 @@ _ROOT = Path.cwd()
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
         self._mystbin = None
+        self._mystbin_attempted = False
         self._shutdown = False
         self._exclusions = ["jishaku"]
         self._display = asyncio.Event()
@@ -35,8 +36,8 @@ class Bot(commands.Bot):
         self.autocomplete: bool = kwargs.pop("autocomplete", True)
         self.silent: bool = kwargs.pop("silent", False)
         self.no_flags: bool = kwargs.pop("no_flags", False)
-        self.excluded_extensions: Container = kwargs.pop("exclude", [])
         self.config: Dict = self._get_config()
+        self.excluded_extensions: List[str] = kwargs.pop("exclude", [])
         self.mentions: Set[str] = None
         self.session = aiohttp.ClientSession()
         self.permissions: discord.Permissions = kwargs.pop(
@@ -102,7 +103,9 @@ class Bot(commands.Bot):
 
     @property
     def mystbin(self):
-        if not self._mystbin:
+        if not (self._mystbin or self._mystbin_attempted):
+            self._mystbin_attempted = True
+
             with contextlib.suppress(ModuleNotFoundError):
                 import mystbin
 
@@ -150,6 +153,9 @@ class Bot(commands.Bot):
 
     def _resolve_to_base_path(self, path: Path):
         return path.relative_to(_ROOT)
+
+    def _is_multi(self, ctx, content):
+        return content.find(";; ") > -1 and not ctx.valid
 
     async def _shutdown_check(self, ctx):
         if self._shutdown:
@@ -226,7 +232,7 @@ class Bot(commands.Bot):
 
     def load_extensions(self,
                         path: Union[Path, str], *,
-                        exclude: Container[str] = [],
+                        exclude: List[str] = [],
                         recurse: bool = False):
         path = Path(path)
         resolved = path.resolve()
@@ -294,7 +300,7 @@ class Bot(commands.Bot):
         super().run(token, **kwargs)
 
     async def on_message(self, message):
-        is_multi = message.content.find(";; ") > -1
+        ctx = await self.get_context(message)
         autocompleted = await self._autocomplete_command(message)
 
         if self.mentions and message.content in self.mentions:
@@ -303,7 +309,7 @@ class Bot(commands.Bot):
             ctx = await self.get_context(alt_message)
 
             await self.bot.invoke(ctx)
-        elif is_multi:
+        elif self._is_multi(ctx, message.content):
             await self.process_multi_commands(message)
         elif not autocompleted:
             await self.process_commands(message)
