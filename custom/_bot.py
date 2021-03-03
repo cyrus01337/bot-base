@@ -6,34 +6,22 @@ import sys
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Container, Dict, List, Tuple, Union
+from typing import Container, Dict, List, Set, Union
 
 import aiohttp
 import discord
+import toml
 from discord.ext import commands
 
-from base import errors
-from base import utils
+from base import errors, utils
 from base.utils import Flags
 from base.typings import overwritable
+
+_ROOT = Path.cwd()
 
 
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault("intents", discord.Intents.all())
-        kwargs.setdefault("command_prefix", commands.when_mentioned)
-        kwargs.setdefault(
-            "allowed_mentions",
-            discord.AllowedMentions(everyone=False, roles=False)
-        )
-        kwargs.setdefault(
-            "activity",
-            discord.Activity(
-                type=discord.ActivityType.listening,
-                name="pings"
-            )
-        )
-
         self._mystbin = None
         self._shutdown = False
         self._exclusions = ["jishaku"]
@@ -48,11 +36,26 @@ class Bot(commands.Bot):
         self.silent: bool = kwargs.pop("silent", False)
         self.no_flags: bool = kwargs.pop("no_flags", False)
         self.excluded_extensions: Container = kwargs.pop("exclude", [])
-        self.mentions: Tuple[str] = None
+        self.config: Dict = self._get_config()
+        self.mentions: Set[str] = None
         self.session = aiohttp.ClientSession()
         self.permissions: discord.Permissions = kwargs.pop(
             "permissions",
             discord.Permissions()
+        )
+
+        kwargs.setdefault("intents", discord.Intents.all())
+        kwargs.setdefault(
+            "command_prefix",
+            self.config.get("prefix", commands.when_mentioned)
+        )
+        kwargs.setdefault(
+            "allowed_mentions",
+            discord.AllowedMentions(everyone=False, roles=False)
+        )
+        kwargs.setdefault(
+            "activity",
+            discord.Activity(type=discord.ActivityType.listening, name="pings")
         )
 
         if not self.no_flags:
@@ -75,7 +78,7 @@ class Bot(commands.Bot):
 
     @utils.when_ready()
     async def __core_ainit__(self):
-        self.mentions = (f"<@{self.user.id}>", f"<@!{self.user.id}>")
+        self.mentions = {f"<@{self.user.id}>", f"<@!{self.user.id}>"}
 
     @overwritable
     @utils.when_ready()
@@ -105,6 +108,14 @@ class Bot(commands.Bot):
 
                 self._mystbin = mystbin.Client()
         return self._mystbin
+
+    def _get_config(self):
+        config = {}
+
+        with Path("config.toml") as file:
+            with contextlib.suppress(TypeError, toml.TomlDecodeError):
+                config = toml.load(file)
+        return config.get("bot", config)
 
     def _startup_error(self, future):
         if future.cancelled():
@@ -138,8 +149,7 @@ class Bot(commands.Bot):
         return message_found
 
     def _resolve_to_base_path(self, path: Path):
-        root = Path.cwd()
-        return path.relative_to(root)
+        return path.relative_to(_ROOT)
 
     async def _shutdown_check(self, ctx):
         if self._shutdown:
@@ -191,10 +201,12 @@ class Bot(commands.Bot):
                                     return command
             return None
 
-    async def _process_multi_commands(self, message, payload: List[str]):
+    async def process_multi_commands(self, message: discord.Message):
         prefix: str = None
 
-        for content in payload:
+        for content in message.content.split(";; "):
+            if not content:
+                continue
             if prefix:
                 content = f"{prefix}content"
 
@@ -216,22 +228,22 @@ class Bot(commands.Bot):
                         path: Union[Path, str], *,
                         exclude: Container[str] = [],
                         recurse: bool = False):
-        if isinstance(path, str):
-            path = Path(path)
-        path = path.resolve()
-        glob = path.glob
+        path = Path(path)
+        resolved = path.resolve()
+        glob = resolved.glob
 
         if recurse:
-            glob = path.rglob
+            glob = resolved.rglob
 
         for file in glob("[!__]*.py"):
             if file.name not in exclude:
                 base_path = self._resolve_to_base_path(file)
-                resolved = utils.dotted(base_path)
-                self.load_extension(resolved)
+                dotted = utils.dotted(base_path)
+                self.load_extension(dotted)
 
     def load_base_extensions(self, *, exclude=[]):
         base_path = Path(__file__) / "../../cogs"
+
         self.load_extensions(base_path, exclude=exclude)
 
     def trigger_display(self):
@@ -282,7 +294,7 @@ class Bot(commands.Bot):
         super().run(token, **kwargs)
 
     async def on_message(self, message):
-        split = message.content.split("; ")
+        is_multi = message.content.find(";; ") > -1
         autocompleted = await self._autocomplete_command(message)
 
         if self.mentions and message.content in self.mentions:
@@ -291,8 +303,8 @@ class Bot(commands.Bot):
             ctx = await self.get_context(alt_message)
 
             await self.bot.invoke(ctx)
-        elif split:
-            await self._process_multi_commands(message, split)
+        elif is_multi:
+            await self.process_multi_commands(message)
         elif not autocompleted:
             await self.process_commands(message)
 

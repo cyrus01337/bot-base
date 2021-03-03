@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import os
 from urllib.parse import urlparse
@@ -61,7 +62,10 @@ class Owner(custom.Cog, hidden=True):
 
         if not channel_found:
             return None
-        return await channel_found.fetch_message(payload.message_id)
+
+        with contextlib.suppress(discord.HTTPException):
+            return await channel_found.fetch_message(payload.message_id)
+        return None
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload):
