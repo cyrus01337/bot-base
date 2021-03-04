@@ -1,12 +1,11 @@
 import asyncio
 import contextlib
 import copy
-import os
 import sys
 from collections import OrderedDict
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Optional, Set, Union
 
 import aiohttp
 import discord
@@ -14,7 +13,6 @@ import toml
 from discord.ext import commands
 
 from base import errors, utils
-from base.utils import Flags
 from base.typings import overwritable
 
 _ROOT = Path.cwd()
@@ -40,16 +38,16 @@ class Bot(commands.Bot):
         self.excluded_extensions: List[str] = kwargs.pop("exclude", [])
         self.mentions: Set[str] = None
         self.session = aiohttp.ClientSession()
+        self.mention_command: Optional[str] = kwargs.pop(
+            "mention_command",
+            "prefix"
+        )
         self.permissions: discord.Permissions = kwargs.pop(
             "permissions",
             discord.Permissions()
         )
 
         kwargs.setdefault("intents", discord.Intents.all())
-        kwargs.setdefault(
-            "command_prefix",
-            self.config.get("prefix", commands.when_mentioned)
-        )
         kwargs.setdefault(
             "allowed_mentions",
             discord.AllowedMentions(everyone=False, roles=False)
@@ -58,11 +56,17 @@ class Bot(commands.Bot):
             "activity",
             discord.Activity(type=discord.ActivityType.listening, name="pings")
         )
+        kwargs.setdefault(
+            "command_prefix",
+            commands.when_mentioned_or(
+                self.config.get("prefix", commands.when_mentioned)
+            )
+        )
 
         if not self.no_flags:
-            Flags(hide=True,
-                  no_underscore=True,
-                  no_dm_traceback=True)
+            utils.Flags(hide=True,
+                        no_underscore=True,
+                        no_dm_traceback=True)
 
         super().__init__(*args, **kwargs)
         self.add_check(self._shutdown_check)
@@ -129,15 +133,11 @@ class Bot(commands.Bot):
             self.dispatch("startup_error", error)
 
     def _strip_prefix(self, content, prefixes):
-        match_found: str = None
         prefixes = filter(content.startswith, prefixes)
-
-        for prefix in prefixes:
-            # in the instance of having multiple, simiar prefixes,
-            # this grabs both a prefix serving as the initial match
-            # and the longest possible prefix able to be matched
-            if not match_found or len(prefix) > len(match_found):
-                match_found = prefix
+        # in the instance of having multiple, simiar prefixes, this
+        # grabs both a prefix serving as the initial match and the
+        # longest possible prefix able to be matched
+        match_found = max(prefixes, key=len)
 
         if match_found:
             return content[len(match_found):]
@@ -270,6 +270,13 @@ class Bot(commands.Bot):
         message = utils.format_exception(error)
         print(message, file=sys.stderr)
 
+    async def on_bot_mention(self, message):
+        alt_message = copy.copy(message)
+        alt_message.content = f"{message.content} {self.mention_command}"
+        alt_ctx = await self.get_context(alt_message)
+
+        await self.invoke(alt_ctx)
+
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L656-L661
     # https://github.com/Rapptz/discord.py/blob/master/discord/ext/commands/bot.py#L603-L609
     def load_extension(self, name):
@@ -288,15 +295,14 @@ class Bot(commands.Bot):
         self.log(f"{method} cog: {name}")
 
     def run(self, token=None, **kwargs):
-        path = "./TOKEN"
-
         if token is None:
-            if os.path.exists(path):
-                with open(path, "r") as f:
+            file = Path("TOKEN")
+
+            if file.exists():
+                with file.open("r") as f:
                     token = str.strip(f.read())
             else:
-                full = os.path.abspath(path)
-                raise errors.TokenFileNotFound(f'{full}" not found')
+                raise errors.TokenNotFound(f'{file.resolve()}" not found')
         super().run(token, **kwargs)
 
     async def on_message(self, message):
@@ -304,11 +310,9 @@ class Bot(commands.Bot):
         autocompleted = await self._autocomplete_command(message)
 
         if self.mentions and message.content in self.mentions:
-            alt_message = copy.copy(message)
-            alt_message.content = f"{message.content} prefix"
-            alt_ctx = await self.get_context(alt_message)
-
-            await self.bot.invoke(alt_ctx)
+            if not self.mention_command:
+                return
+            await self.on_bot_mention(message)
         elif self._is_multi(ctx, message.content):
             await self.process_multi_commands(message)
         elif not autocompleted:
