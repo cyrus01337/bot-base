@@ -34,6 +34,7 @@ class Bot(commands.Bot):
         self.autocomplete: bool = kwargs.pop("autocomplete", True)
         self.silent: bool = kwargs.pop("silent", False)
         self.no_flags: bool = kwargs.pop("no_flags", False)
+        self.delimiter: str = kwargs.pop("delimiter", ";")
         self.config: Dict = self._get_config()
         self.excluded_extensions: List[str] = kwargs.pop("exclude", [])
         self.mentions: Set[str] = None
@@ -154,8 +155,8 @@ class Bot(commands.Bot):
     def _resolve_to_base_path(self, path: Path):
         return path.relative_to(_ROOT)
 
-    def _is_multi(self, ctx, content):
-        return content.find(";; ") > -1 and not ctx.valid
+    def _is_multi(self, content):
+        return content.find(self.delimiter) > -1
 
     async def _shutdown_check(self, ctx):
         if self._shutdown:
@@ -208,23 +209,19 @@ class Bot(commands.Bot):
             return None
 
     async def process_multi_commands(self, message: discord.Message):
-        prefix: str = None
+        ctx = await self.get_context(message)
 
-        for content in message.content.split(";; "):
-            if not content:
-                continue
-            if prefix:
-                content = f"{prefix}content"
+        if not ctx.valid:
+            return
+        content = message.content[len(ctx.prefix):]
 
+        for command in map(str.strip, content.split(self.delimiter)):
             alt_message = copy.copy(message)
-            alt_message.content = content
-            ctx = await self.get_context(alt_message)
+            alt_message.content = ctx.prefix + command
+            alt_ctx = await self.get_context(alt_message)
 
-            if not ctx.valid:
-                continue
-            if ctx.prefix and not prefix:
-                prefix = ctx.prefix
-            await self.invoke(ctx)
+            if ctx.valid:
+                await self.invoke(alt_ctx)
 
     def log(self, message):
         if not self.silent:
@@ -306,14 +303,14 @@ class Bot(commands.Bot):
         super().run(token, **kwargs)
 
     async def on_message(self, message):
-        ctx = await self.get_context(message)
         autocompleted = await self._autocomplete_command(message)
 
         if self.mentions and message.content in self.mentions:
             if not self.mention_command:
                 return
             await self.on_bot_mention(message)
-        elif self._is_multi(ctx, message.content):
+        elif self._is_multi(message.content):
+            print("hi")
             await self.process_multi_commands(message)
         elif not autocompleted:
             await self.process_commands(message)
