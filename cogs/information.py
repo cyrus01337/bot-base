@@ -7,9 +7,7 @@ from base import custom
 
 class Information(custom.Cog):
     def __init__(self, bot):
-        original = bot.help_command
-
-        self._original_help_command = original
+        self._original_help_command = bot.help_command
         self.bot = bot
         self.mentions = re.compile(r"<@!?[0-9]+> ")
 
@@ -44,6 +42,7 @@ class Information(custom.Cog):
         """
         prefixes = await self.bot.get_prefix(ctx.message)
         formatted = self._format_prefixes(prefixes)
+
         await ctx.send(f"You can mention me or use any of the following "
                        f"prefixes like so: {formatted}")
 

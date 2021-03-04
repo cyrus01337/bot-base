@@ -26,9 +26,9 @@ class Embed(discord.Embed):
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop("fields", [])
         kwargs.setdefault("color", kwargs.pop("colour", 0x7289DA))
+        kwargs.setdefault("description", kwargs.pop("desc", None))
 
         super().__init__(*args, **kwargs)
-        self.description = kwargs.pop("desc", self.description)
         self._fields = []
 
         if isinstance(fields, Field):
