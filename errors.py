@@ -5,7 +5,7 @@ class BotBaseError(Exception):
     pass
 
 
-class TokenFileNotFound(BotBaseError):
+class TokenNotFound(BotBaseError):
     pass
 
 
