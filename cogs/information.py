@@ -30,7 +30,6 @@ class Information(custom.Cog):
                 added_mention = True
             else:
                 continue
-            print("Added", prefix, added_mention, self.mentions.match(prefix))
             ret.append(prefix)
         return (", ").join(ret)
 
