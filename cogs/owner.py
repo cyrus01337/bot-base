@@ -90,7 +90,7 @@ class Owner(custom.Cog, hidden=True):
 
     @commands.command()
     async def invite(self, ctx):
-        await ctx.send(self.bot.invite_url, delete_after=3)
+        await ctx.send(self.invite_url, delete_after=3)
 
     @commands.command()
     async def clear(self, ctx):
