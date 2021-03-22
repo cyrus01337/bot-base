@@ -3,11 +3,11 @@ import contextlib
 import copy
 import sys
 from collections import OrderedDict
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Union
 
 import aiohttp
+import aiosqlite
 import discord
 import toml
 from discord.ext import commands
@@ -21,14 +21,16 @@ _ROOT = Path.cwd()
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
         self._mystbin = None
+        self._db = None
         self._mystbin_attempted = False
         self._shutdown = False
         self._exclusions = ["jishaku"]
         self._display = asyncio.Event()
+        self._edit_cache_maximum: int = kwargs.pop("max_edit_messages", 1000)
         self._on_ready_tasks: List[asyncio.Task] = []
         self._edit_cache: Dict[int, discord.Message] = OrderedDict()
-        self._edit_cache_maximum = kwargs.pop("max_edit_messages", 1000)
 
+        self.session = aiohttp.ClientSession()
         self.home_id: int = kwargs.pop("home", None)
         self.error_log_id: int = kwargs.pop("error_log", None)
         self.autocomplete: bool = kwargs.pop("autocomplete", True)
@@ -38,7 +40,7 @@ class Bot(commands.Bot):
         self.config: Dict = self._get_config()
         self.excluded_extensions: List[str] = kwargs.pop("exclude", [])
         self.mentions: Set[str] = None
-        self.session = aiohttp.ClientSession()
+        self.blacklist: Set[int] = None
         self.mention_command: Optional[str] = kwargs.pop(
             "mention_command",
             "prefix"
@@ -57,17 +59,20 @@ class Bot(commands.Bot):
             "activity",
             discord.Activity(type=discord.ActivityType.listening, name="pings")
         )
-        kwargs.setdefault(
-            "command_prefix",
-            commands.when_mentioned_or(
-                self.config.get("prefix", commands.when_mentioned)
-            )
-        )
+
+        bot_config = self.config.get("bot", self.config)
+        command_prefix = bot_config.get("prefix", commands.when_mentioned)
+
+        if isinstance(command_prefix, str):
+            command_prefix = commands.when_mentioned_or(command_prefix)
+        kwargs.setdefault("command_prefix", command_prefix)
 
         if not self.no_flags:
-            utils.Flags(hide=True,
-                        no_underscore=True,
-                        no_dm_traceback=True)
+            utils.Flags(
+                hide=True,
+                no_underscore=True,
+                no_dm_traceback=True
+            )
 
         super().__init__(*args, **kwargs)
         self.add_check(self._shutdown_check)
@@ -84,7 +89,23 @@ class Bot(commands.Bot):
 
     @utils.when_ready()
     async def __core_ainit__(self):
+        self._db = await aiosqlite.connect("blacklist.db")
         self.mentions = {f"<@{self.user.id}>", f"<@!{self.user.id}>"}
+        query = """
+            CREATE SCHEMA IF NOT EXISTS administrator;
+
+            CREATE TABLE IF NOT EXISTS administrator.blacklist(
+                id INT PRIMARY KEY,
+                member_id BIGINT NOT NULL
+            );
+
+            SELECT member_id FROM administrator.blacklist;
+        """
+
+        async with self._db.executescript(query) as cursor:
+            self.blacklist = await cursor.fetchall()
+
+            await self._db.commit()
 
     @overwritable
     @utils.when_ready()
@@ -118,12 +139,9 @@ class Bot(commands.Bot):
         return self._mystbin
 
     def _get_config(self):
-        config = {}
-
         with Path("config.toml") as file:
             with contextlib.suppress(TypeError, toml.TomlDecodeError):
-                config = toml.load(file)
-        return config.get("bot", config)
+                return toml.load(file)
 
     def _startup_error(self, future):
         if future.cancelled():
@@ -166,13 +184,8 @@ class Bot(commands.Bot):
     async def _autocomplete_command(self, message):
         if self.autocomplete:
             prefixes = await self.get_prefix(message)
-            prefix_iterable = (isinstance(prefixes, Iterable) and
-                               not isinstance(prefixes, str))
 
-            if prefix_iterable:
-                prefixes = tuple(prefixes)
-
-            if message.content.startswith(prefixes):
+            if message.content.startswith(tuple(prefixes)):
                 name = self._strip_prefix(message.content, prefixes)
 
                 if name != "":
@@ -310,7 +323,6 @@ class Bot(commands.Bot):
                 return
             await self.on_bot_mention(message)
         elif self._is_multi(message.content):
-            print("hi")
             await self.process_multi_commands(message)
         elif not autocompleted:
             await self.process_commands(message)
@@ -319,5 +331,6 @@ class Bot(commands.Bot):
         for task in self._on_ready_tasks:
             task.cancel()
 
+        await self._db.close()
         await self.session.close()
         await super().close()
