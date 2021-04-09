@@ -1,10 +1,7 @@
 import contextlib
 import copy
-import os
-from urllib.parse import urlparse
 from typing import Dict
 
-import aiofiles
 import discord
 from discord.ext import commands, flags
 
@@ -73,20 +70,6 @@ class Owner(custom.Cog, hidden=True):
 
         if message_found:
             await self.bot.process_commands(message_found)
-
-    @commands.command(aliases=["dl", "get"])
-    async def download(self, ctx, *urls):
-        for url in urls:
-            async with self.bot.session.get(url) as response:
-                parsed = urlparse(url)
-                filename = os.path.basename(parsed.path)
-
-                async with aiofiles.open(f"downloads/{filename}", "wb") as f:
-                    chunk = await response.content.read(1024)
-
-                    while chunk:
-                        await f.write(chunk)
-                        chunk = await response.content.read(1024)
 
     @commands.command()
     async def invite(self, ctx):
