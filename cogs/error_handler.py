@@ -68,13 +68,19 @@ class ErrorHandler(custom.Cog):
     @overwritable
     async def output(self,
                      error,
-                     destination: Optional[Destination] = None):
+                     destination: Optional[Destination] = None,
+                     *, embed: bool = False):
         formatted = self.format_exception(error)
-        embed = discord.Embed(description=formatted)
+        args = [formatted]
+        kwargs = {}
+
+        if embed:
+            args = []
+            kwargs["embed"] = discord.Embed(description=formatted)
 
         if destination:
             with contextlib.suppress(discord.HTTPException):
-                await destination.send(embed=embed)
+                await destination.send(*args, **kwargs)
 
     @overwritable
     async def on_base_error(self, error: Exception):
