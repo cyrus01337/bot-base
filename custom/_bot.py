@@ -92,14 +92,12 @@ class Bot(commands.Bot):
         self._db = await aiosqlite.connect("blacklist.db")
         self.mentions = {f"<@{self.user.id}>", f"<@!{self.user.id}>"}
         query = """
-            CREATE SCHEMA IF NOT EXISTS administrator;
-
-            CREATE TABLE IF NOT EXISTS administrator.blacklist(
+            CREATE TABLE IF NOT EXISTS blacklist(
                 id INT PRIMARY KEY,
                 member_id BIGINT NOT NULL
             );
 
-            SELECT member_id FROM administrator.blacklist;
+            SELECT member_id FROM blacklist;
         """
 
         async with self._db.executescript(query) as cursor:
